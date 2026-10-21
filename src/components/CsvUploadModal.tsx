@@ -25,6 +25,8 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
     vendor: string;
     images: string;
     category: string;
+    color: string;
+    dimensions: string;
   }>({
     sku: '',
     title: '',
@@ -33,6 +35,8 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
     vendor: '',
     images: '',
     category: '',
+    color: '',
+    dimensions: '',
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -59,15 +63,17 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
         const detectedHeaders = results.meta.fields || [];
         setHeaders(detectedHeaders);
 
-        // Auto match columns based on typical ArkSwift / inventory headers
+        // Auto match columns based on typical Aosom / ArkSwift headers
         const mapping = {
-          sku: detectedHeaders.find((h) => /sku|商品编码|条形码|code|item_no/i.test(h)) || detectedHeaders[0] || '',
-          title: detectedHeaders.find((h) => /title|name|商品名称|标题|item_name/i.test(h)) || detectedHeaders[1] || '',
-          price: detectedHeaders.find((h) => /price|cost|成本|供货价|单价|批发价/i.test(h)) || '',
-          stock: detectedHeaders.find((h) => /stock|quantity|qty|库存|数量|可用库存/i.test(h)) || '',
+          sku: detectedHeaders.find((h) => /^seller\s*sku$/i.test(h)) || detectedHeaders.find((h) => /sku|商品编码|条形码|code|item_no/i.test(h)) || detectedHeaders[0] || '',
+          title: detectedHeaders.find((h) => /product\s*name.*spanish|spanish.*name/i.test(h)) || detectedHeaders.find((h) => /title|name|商品名称|标题|item_name/i.test(h)) || detectedHeaders[1] || '',
+          price: detectedHeaders.find((h) => /list\s*price|cost|price|成本|供货价|单价|批发价/i.test(h)) || '',
+          stock: detectedHeaders.find((h) => /qty\s*avail|stock|quantity|qty|库存|数量|可用库存/i.test(h)) || '',
           vendor: detectedHeaders.find((h) => /vendor|supplier|品牌|供应商|原厂/i.test(h)) || '',
           images: detectedHeaders.find((h) => /image|img|图片|主图|pic/i.test(h)) || '',
-          category: detectedHeaders.find((h) => /category|cat|分类|类目/i.test(h)) || '',
+          category: detectedHeaders.find((h) => /^category$/i.test(h)) || detectedHeaders.find((h) => /category|三级类目|类目|分类/i.test(h)) || '',
+          color: detectedHeaders.find((h) => /main\s*color|color|颜色/i.test(h)) || '',
+          dimensions: detectedHeaders.find((h) => /assembled.*(length|width|height)|dimension|medidas|尺寸/i.test(h)) || '',
         };
         setColumnMapping(mapping);
       },
@@ -86,7 +92,10 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
       const rawPrice = parseFloat(String(row[columnMapping.price] || '0').replace(/[^0-9.]/g, '')) || 25.0;
       const rawStock = parseInt(String(row[columnMapping.stock] || '0').replace(/[^0-9]/g, '')) || 10;
       const rawVendor = String(row[columnMapping.vendor] || 'SPANISH AOSOM SL').trim();
-      const rawCategory = String(row[columnMapping.category] || 'Muebles y Hogar').trim();
+      // Requirement 1: Column X Category is Aosom's 3rd-level English category
+      const rawCategory = String(row[columnMapping.category] || '').trim();
+      const rawColor = columnMapping.color ? String(row[columnMapping.color] || '').trim() : '';
+      const rawDims = columnMapping.dimensions ? String(row[columnMapping.dimensions] || '').trim() : '';
       const rawImage = String(row[columnMapping.images] || '').trim();
 
       const images = rawImage
@@ -100,9 +109,12 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
         originalVendor: rawVendor,
         originalPrice: rawPrice,
         stock: rawStock,
-        category: rawCategory,
+        category: rawCategory || 'Greenhouse',
+        englishCategory: rawCategory,
+        mainColor: rawColor,
+        dimensions: rawDims,
         images,
-        description: `Imported from ArkSwift CSV export (${rawSku})`,
+        description: `Imported from Aosom/ArkSwift CSV export (${rawSku})`,
       };
     });
 
@@ -120,8 +132,8 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">导入 ArkSwift 库存导出表格</h3>
-              <p className="text-xs text-slate-400">支持 CSV / TXT 格式，自动识别列头并映射至 Casalivo 引擎</p>
+              <h3 className="text-base font-bold text-white">导入 Aosom / ArkSwift 供应商表格</h3>
+              <p className="text-xs text-slate-400">支持 CSV / TXT 格式，自动识别三级类目(Category)、规格与价格</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
@@ -134,9 +146,9 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
           <div className="border-2 border-dashed border-slate-700 hover:border-amber-400/60 rounded-xl p-6 text-center transition bg-slate-950/40">
             <UploadCloud className="w-10 h-10 text-slate-400 mx-auto mb-2" />
             <p className="text-xs font-semibold text-slate-200 mb-1">
-              {file ? file.name : '点击选择或拖拽 ArkSwift 导出文件 (例如: 库存 - 工作表1.csv)'}
+              {file ? file.name : '点击选择或拖拽供应商表格 (例如: Aosom ESStore Products.csv / 库存.csv)'}
             </p>
-            <p className="text-[11px] text-slate-500 mb-3">支持从 ArkSwift 分销后台导出的任意商品库存表格</p>
+            <p className="text-[11px] text-slate-500 mb-3">支持 Aosom / ArkSwift 导出的任意商品库存表格</p>
             <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg cursor-pointer transition">
               <span>浏览本地文件</span>
               <input type="file" accept=".csv,.txt" onChange={handleFileUpload} className="hidden" />
@@ -164,7 +176,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-400 mb-1">SKU 编码列 *</label>
+                  <label className="block text-slate-400 mb-1">SKU 编码列 (Seller SKU) *</label>
                   <select
                     value={columnMapping.sku}
                     onChange={(e) => setColumnMapping({ ...columnMapping, sku: e.target.value })}
@@ -179,12 +191,45 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">商品标题列 *</label>
+                  <label className="block text-slate-400 mb-1">商品标题列 (Product Name) *</label>
                   <select
                     value={columnMapping.title}
                     onChange={(e) => setColumnMapping({ ...columnMapping, title: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
                   >
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Aosom 三级英文类目 (Category) *</label>
+                  <select
+                    value={columnMapping.category}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, category: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-amber-300 font-medium"
+                  >
+                    <option value="">-- 未指定 (自动推断) --</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">用于自动填充 Tag 并映射 Shopify 1-2 级目录</span>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">主颜色列 (Main Color / Color)</label>
+                  <select
+                    value={columnMapping.color}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, color: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                  >
+                    <option value="">-- 无 / 未指定 --</option>
                     {headers.map((h) => (
                       <option key={h} value={h}>
                         {h}
@@ -210,7 +255,7 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">实时库存量 (Stock) *</label>
+                  <label className="block text-slate-400 mb-1">实时库存量 (Qty Available) *</label>
                   <select
                     value={columnMapping.stock}
                     onChange={(e) => setColumnMapping({ ...columnMapping, stock: e.target.value })}

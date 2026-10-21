@@ -10,6 +10,7 @@ export function generatePythonSyncBotCode(
   'arkswift_api.py': string;
   'whitewash_engine.py': string;
   'shopify_client.py': string;
+  'wipe_shopify_products.py': string;
   'run_daily_sync.bat': string;
   'requirements.txt': string;
   '.env.example': string;
@@ -129,6 +130,7 @@ ${bannedList}
     ]
 
     PRICING_TIERS = ${tiersJson}
+    ENABLE_COMPARE_AT = ${pricingConfig.enableCompareAtPrice ? 'True' : 'False'} # GMC Policy protection
 
     @classmethod
     def calculate_price(cls, cost: float) -> Dict[str, float]:
@@ -159,13 +161,13 @@ ${bannedList}
         else:
             price = round(raw_price, 2)
 
-        compare_at = math.floor(price * cls.COMPARE_AT_MULTIPLIER) + 0.99
+        compare_at = (math.floor(price * cls.COMPARE_AT_MULTIPLIER) + 0.99) if cls.ENABLE_COMPARE_AT else 0.0
         profit = round(price - cost, 2)
         margin = round((profit / price) * 100, 1) if price > 0 else 0.0
 
         return {
             "price": round(price, 2),
-            "compare_at_price": round(compare_at, 2),
+            "compare_at_price": round(compare_at, 2) if cls.ENABLE_COMPARE_AT else 0.0,
             "profit": profit,
             "margin": margin,
             "applied_tier": tier["name"]
@@ -239,12 +241,12 @@ ${bannedList}
             "title": cls.clean_title(orig_title),
             "vendor": cls.BRAND_NAME,
             "price": pricing["price"],
-            "compare_at_price": pricing["compare_at_price"],
+            "compare_at_price": pricing["compare_at_price"] if cls.ENABLE_COMPARE_AT else None,
             "stock": avail_stock,
             "raw_stock": stock,
             "description_html": cls.clean_description(raw_item.get("description", "")),
             "images": raw_item.get("images", []),
-            "tags": ["Casalivo", "Dropship", "AutoSync"],
+            "tags": list(dict.fromkeys(["Casalivo", "Dropship", "AutoSync"] + ([str(raw_item.get("category")).strip()] if raw_item.get("category") else []))),
         }
 `;
 
@@ -535,11 +537,124 @@ SHOPIFY_API_VERSION="2025-07"
 SHOPIFY_LOCATION_ID="${shopifyConfig.locationId || ''}"
 `;
 
+  const wipeShopifyPy = `"""
+Casalivo - Shopify Store Wipe Tool (Python Standalone Script)
+批量安全清空 Shopify 后台全部已有商品 (支持跨页查询与 productDelete GraphQL)
+"""
+import time
+import requests
+
+SHOP_DOMAIN = "${shopifyConfig.shopDomain || 'casalivo.myshopify.com'}"
+ADMIN_ACCESS_TOKEN = "shpat_YOUR_ADMIN_ACCESS_TOKEN_HERE"
+API_VERSION = "${shopifyConfig.apiVersion || '2025-07'}"
+
+HEADERS = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": ADMIN_ACCESS_TOKEN,
+}
+
+GRAPHQL_URL = f"https://{SHOP_DOMAIN}/admin/api/{API_VERSION}/graphql.json"
+
+GET_PRODUCTS_QUERY = """
+query getBatch($first: Int!) {
+  products(first: $first) {
+    pageInfo {
+      hasNextPage
+    }
+    edges {
+      node {
+        id
+        title
+      }
+    }
+  }
+}
+"""
+
+DELETE_MUTATION = """
+mutation deleteProduct($input: ProductDeleteInput!) {
+  productDelete(input: $input) {
+    deletedProductId
+    userErrors {
+      field
+      message
+    }
+  }
+}
+"""
+
+def delete_all_products():
+    print(f"[*] 正在连接 Shopify 商店: {SHOP_DOMAIN}")
+    total_deleted = 0
+    round_no = 1
+    
+    while True:
+        print(f"[*] [第 {round_no} 轮] 正在获取待删除商品批次 (50 件/批)...")
+        res = requests.post(
+            GRAPHQL_URL,
+            headers=HEADERS,
+            json={"query": GET_PRODUCTS_QUERY, "variables": {"first": 50}},
+            timeout=20
+        )
+        
+        if res.status_code != 200:
+            print(f"[!] 请求失败: {res.status_code} - {res.text}")
+            break
+            
+        data = res.json().get("data", {})
+        edges = data.get("products", {}).get("edges", [])
+        
+        if not edges:
+            print("[+] Shopify 店铺后台已没有产品，全部清空完成！")
+            break
+            
+        print(f"[*] 本轮拉取到 {len(edges)} 件商品，开始逐一删除...")
+        
+        for idx, edge in enumerate(edges, start=1):
+            prod = edge["node"]
+            prod_id = prod["id"]
+            title = prod["title"]
+            
+            del_res = requests.post(
+                GRAPHQL_URL,
+                headers=HEADERS,
+                json={"query": DELETE_MUTATION, "variables": {"input": {"id": prod_id}}},
+                timeout=15
+            )
+            
+            if del_res.status_code == 200:
+                del_json = del_res.json()
+                errs = del_json.get("data", {}).get("productDelete", {}).get("userErrors", [])
+                if errs:
+                    print(f"  [!] 删除跳过 {title}: {errs}")
+                else:
+                    total_deleted += 1
+                    print(f"  [OK] 已删除 #{total_deleted}: {title}")
+            else:
+                print(f"  [!] HTTP错误 {title}: {del_res.status_code}")
+                
+            time.sleep(0.08)  # 避免触发 API 速率限制
+            
+        round_no += 1
+        
+    print(f"\\n========================================")
+    print(f"[+] 任务结束！总共成功从 Shopify 删除: {total_deleted} 件商品")
+    print(f"========================================")
+
+if __name__ == "__main__":
+    confirm = input("警告：此操作不可逆，将清空指定 Shopify 店铺所有商品！输入 'YES' 开始: ")
+    if confirm.strip().upper() == "YES":
+        delete_all_products()
+    else:
+        print("[*] 已取消操作。")
+`;
+
   return {
     'sync_bot.py': syncBotPy,
     'arkswift_api.py': arkswiftApiPy,
     'whitewash_engine.py': whitewashEnginePy,
     'shopify_client.py': shopifyClientPy,
+    'wipe_shopify_products.py': wipeShopifyPy,
     'run_daily_sync.bat': runBat,
     'requirements.txt': requirementsTxt,
     '.env.example': envExample,

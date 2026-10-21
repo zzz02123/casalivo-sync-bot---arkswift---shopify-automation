@@ -20,7 +20,7 @@ export const PythonScriptModal: React.FC<PythonScriptModalProps> = ({
   shopifyConfig,
   arkswiftConfig,
 }) => {
-  const [activeFile, setActiveFile] = useState<'sync_bot.py' | 'arkswift_api.py' | 'whitewash_engine.py' | 'shopify_client.py' | 'run_daily_sync.bat' | '.env.example' | 'requirements.txt'>('sync_bot.py');
+  const [activeFile, setActiveFile] = useState<'sync_bot.py' | 'arkswift_api.py' | 'whitewash_engine.py' | 'shopify_client.py' | 'wipe_shopify_products.py' | 'run_daily_sync.bat' | '.env.example' | 'requirements.txt'>('sync_bot.py');
   const [isCopied, setIsCopied] = useState(false);
 
   if (!isOpen) return null;

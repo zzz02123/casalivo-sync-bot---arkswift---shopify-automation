@@ -5,7 +5,7 @@ import crypto from 'crypto';
 
 dotenv.config();
 
-import { adminGraphql, adminRest, tokenManager, ADMIN_API_VERSION } from './shopify_auth';
+import { adminGraphql, adminRest, tokenManager, ADMIN_API_VERSION } from './shopify_auth.ts';
 
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
@@ -240,6 +240,33 @@ const UPDATE_VARIANTS = `
   }
 `;
 
+const CREATE_VARIANTS = `
+  mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkCreate(productId: $productId, variants: $variants) {
+      productVariants { id sku price }
+      userErrors { field message }
+    }
+  }
+`;
+
+const GET_PRODUCT_VARIANTS = `
+  query($id: ID!) {
+    product(id: $id) {
+      id
+      variants(first: 50) {
+        edges {
+          node {
+            id
+            sku
+            title
+            inventoryItem { id }
+          }
+        }
+      }
+    }
+  }
+`;
+
 async function resolveLocationId(preferred?: string): Promise<string | null> {
   if (preferred) return preferred;
   if (process.env.SHOPIFY_LOCATION_ID) return process.env.SHOPIFY_LOCATION_ID;
@@ -292,14 +319,20 @@ app.post('/api/shopify/publish-product', async (req: Request, res: Response) => 
     const existing = await adminGraphql(PRODUCT_BY_SKU, { q: `sku:${product.sku}` });
     const hit = existing.productVariants?.edges?.[0]?.node || null;
 
+    const rawTags = Array.isArray(product.tags)
+      ? product.tags
+      : String(product.tags || 'Casalivo').split(',').map((t: string) => t.trim());
+    const finalTags = Array.from(new Set(rawTags.filter(Boolean)));
+    if (product.englishCategory && !finalTags.includes(product.englishCategory)) {
+      finalTags.push(product.englishCategory);
+    }
+
     const input: any = {
       title: product.title,
       descriptionHtml: product.descriptionHtml || `<p>${product.description || product.title}</p>`,
       vendor: product.vendor || 'Casalivo',
       productType: product.category || product.productType || 'Home & Living',
-      tags: Array.isArray(product.tags)
-        ? product.tags
-        : String(product.tags || 'Casalivo').split(',').map((t: string) => t.trim()),
+      tags: finalTags,
       status: String(product.status || 'active').toUpperCase(),
     };
 
@@ -310,7 +343,12 @@ app.post('/api/shopify/publish-product', async (req: Request, res: Response) => 
       // 2025-07 moved `sku` off ProductVariantsBulkInput onto InventoryItemInput
       inventoryItem: { sku: product.sku, tracked: true },
     };
-    if (product.compareAtPrice) variantInput.compareAtPrice = Number(product.compareAtPrice).toFixed(2);
+    // GMC policy protection: only send compareAtPrice if positive and enabled
+    if (product.compareAtPrice && Number(product.compareAtPrice) > 0) {
+      variantInput.compareAtPrice = Number(product.compareAtPrice).toFixed(2);
+    } else {
+      variantInput.compareAtPrice = null;
+    }
     if (product.weight) {
       variantInput.inventoryItem.measurement = { weight: { value: Number(product.weight), unit: 'KILOGRAMS' } };
     }
@@ -369,6 +407,182 @@ app.post('/api/shopify/publish-product', async (req: Request, res: Response) => 
     }
 
     res.json({ success: true, action, productId, sku: product.sku, token: tokenManager.status() });
+  } catch (err: any) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// 5.1 Publish Parent Listing with Variants (主体商品 + 子变体，上传后台是一个 listing)
+app.post('/api/shopify/publish-listing', async (req: Request, res: Response) => {
+  try {
+    const { listing, locationId } = req.body || {};
+    if (!listing || !listing.title || !Array.isArray(listing.variants) || !listing.variants.length) {
+      return res.status(400).json({ success: false, error: 'listing 及 listing.variants 必填' });
+    }
+
+    // 1. Check if any variant already exists on Shopify
+    let productId: string | null = null;
+
+    for (const v of listing.variants) {
+      if (v.sku) {
+        const existing = await adminGraphql(PRODUCT_BY_SKU, { q: `sku:${v.sku}` });
+        const hit = existing.productVariants?.edges?.[0]?.node;
+        if (hit?.product?.id) {
+          productId = hit.product.id;
+          break;
+        }
+      }
+    }
+
+    const rawTags = Array.isArray(listing.tags)
+      ? listing.tags
+      : String(listing.tags || 'Casalivo').split(',').map((t: string) => t.trim());
+    const finalTags = Array.from(new Set(rawTags.filter(Boolean)));
+    if (listing.englishCategory && !finalTags.includes(listing.englishCategory)) {
+      finalTags.push(listing.englishCategory);
+    }
+
+    const input: any = {
+      title: listing.title,
+      descriptionHtml: listing.descriptionHtml || `<p>${listing.title}</p>`,
+      vendor: listing.vendor || 'Casalivo',
+      productType: listing.category || 'Home & Living',
+      tags: finalTags,
+      status: 'ACTIVE',
+    };
+
+    let action = 'updated';
+
+    if (!productId) {
+      // Create new parent product
+      const created = await adminGraphql(CREATE_PRODUCT, { input });
+      const errs = created.productCreate?.userErrors || [];
+      if (errs.length) return res.status(422).json({ success: false, error: errs });
+      productId = created.productCreate.product.id;
+      action = 'created';
+    } else {
+      // Update existing parent product
+      const upd = await adminGraphql(UPDATE_PRODUCT, { input: { ...input, id: productId } });
+      const errs = upd.productUpdate?.userErrors || [];
+      if (errs.length) return res.status(422).json({ success: false, error: errs });
+    }
+
+    if (!productId) {
+      return res.status(500).json({ success: false, error: 'Product ID could not be established' });
+    }
+
+    // 2. Query all existing variants on this product
+    const prodData = await adminGraphql(GET_PRODUCT_VARIANTS, { id: productId });
+    const existingEdges = prodData.product?.variants?.edges || [];
+    const existingVariants: any[] = existingEdges.map((e: any) => e.node);
+
+    // 3. Match variants: updates vs creations
+    const toUpdate: any[] = [];
+    const toCreate: any[] = [];
+    const usedExistingIds = new Set<string>();
+
+    for (let i = 0; i < listing.variants.length; i++) {
+      const v = listing.variants[i];
+      const vInput: any = {
+        price: Number(v.price).toFixed(2),
+        inventoryPolicy: 'DENY',
+        taxable: true,
+        inventoryItem: { sku: v.sku, tracked: true },
+      };
+      if (v.compareAtPrice && Number(v.compareAtPrice) > 0) {
+        vInput.compareAtPrice = Number(v.compareAtPrice).toFixed(2);
+      } else {
+        vInput.compareAtPrice = null;
+      }
+      if (v.weight) {
+        vInput.inventoryItem.measurement = { weight: { value: Number(v.weight), unit: 'KILOGRAMS' } };
+      }
+      if (v.barcode) vInput.barcode = v.barcode;
+
+      // Find an existing variant matching SKU or the first unused existing variant
+      let match = existingVariants.find((ev: any) => ev.sku === v.sku && !usedExistingIds.has(ev.id));
+      if (!match && i === 0 && existingVariants.length > 0 && !usedExistingIds.has(existingVariants[0].id)) {
+        match = existingVariants[0];
+      }
+
+      if (match) {
+        usedExistingIds.add(match.id);
+        vInput.id = match.id;
+        toUpdate.push(vInput);
+      } else {
+        toCreate.push(vInput);
+      }
+    }
+
+    if (toUpdate.length > 0) {
+      try {
+        const vres = await adminGraphql(UPDATE_VARIANTS, { productId, variants: toUpdate });
+        const verrs = vres.productVariantsBulkUpdate?.userErrors || [];
+        if (verrs.length) console.warn('Variants update warning:', verrs);
+      } catch (e: any) {
+        console.warn('Variants update failed:', e.message);
+      }
+    }
+
+    if (toCreate.length > 0) {
+      try {
+        const cres = await adminGraphql(CREATE_VARIANTS, { productId, variants: toCreate });
+        const cerrs = cres.productVariantsBulkCreate?.userErrors || [];
+        if (cerrs.length) console.warn('Variants create warning:', cerrs);
+      } catch (e: any) {
+        console.warn('Variants create failed:', e.message);
+      }
+    }
+
+    // 4. Attach media images
+    if (Array.isArray(listing.images) && listing.images.length) {
+      try {
+        await adminGraphql(
+          `mutation($productId: ID!, $media: [CreateMediaInput!]!) {
+             productCreateMedia(productId: $productId, media: $media) {
+               mediaUserErrors { field message }
+             }
+           }`,
+          {
+            productId,
+            media: listing.images.slice(0, 8).map((src: string) => ({ originalSource: src, mediaContentType: 'IMAGE' })),
+          }
+        );
+      } catch (mediaErr: any) {
+        console.warn('media attach warning:', mediaErr.message);
+      }
+    }
+
+    // 5. Update inventory for each variant
+    const loc = await resolveLocationId(locationId);
+    if (loc) {
+      for (const v of listing.variants) {
+        if (v.stock !== undefined && v.stock !== null) {
+          try {
+            const again = await adminGraphql(PRODUCT_BY_SKU, { q: `sku:${v.sku}` });
+            const invItemId = again.productVariants?.edges?.[0]?.node?.inventoryItem?.id;
+            if (invItemId) {
+              const qtyToSet = v.availableStock !== undefined ? Number(v.availableStock) : Number(v.stock);
+              await setInventory(invItemId, loc, qtyToSet);
+            }
+          } catch (e: any) {
+            console.warn(`inventory set for ${v.sku} failed:`, e.message);
+          }
+        }
+      }
+    }
+
+    // 6. Publish to Online Store channel
+    await publishToOnlineStore(productId);
+
+    res.json({
+      success: true,
+      action,
+      productId,
+      variantCount: listing.variants.length,
+      title: listing.title,
+      token: tokenManager.status(),
+    });
   } catch (err: any) {
     res.status(502).json({ success: false, error: err.message });
   }
@@ -465,6 +679,201 @@ app.post('/api/shopify/fetch-storefront', async (req: Request, res: Response) =>
   }
 });
 
+// 8. Query count and sample titles of products in Shopify
+app.post('/api/shopify/products-count', async (req: Request, res: Response) => {
+  try {
+    const { customShop, customToken } = req.body || {};
+    const shop = (customShop || tokenManager.shop || '').trim();
+    if (!shop) {
+      return res.status(400).json({ success: false, error: 'Shopify 店铺域名未配置' });
+    }
+
+    const query = `
+      query getProductsCount {
+        products(first: 20) {
+          edges {
+            node {
+              id
+              title
+              status
+            }
+          }
+        }
+      }
+    `;
+
+    let data: any;
+    if (customShop && customToken) {
+      const s = customShop.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      const cleanShop = s.includes('.') ? s : `${s}.myshopify.com`;
+      const url = `https://${cleanShop}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': customToken.trim() },
+        body: JSON.stringify({ query }),
+      });
+      const t = await r.text();
+      if (!r.ok) throw new Error(`Shopify GraphQL ${r.status}: ${t.slice(0, 300)}`);
+      data = JSON.parse(t).data;
+    } else {
+      data = await adminGraphql(query);
+    }
+
+    const edges = data?.products?.edges || [];
+    const sampleTitles = edges.map((e: any) => e.node.title);
+
+    let totalCount = edges.length;
+    try {
+      if (customShop && customToken) {
+        const s = customShop.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        const cleanShop = s.includes('.') ? s : `${s}.myshopify.com`;
+        const countUrl = `https://${cleanShop}/admin/api/${ADMIN_API_VERSION}/products/count.json`;
+        const cr = await fetch(countUrl, {
+          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': customToken.trim() },
+        });
+        if (cr.ok) {
+          const cj = await cr.json();
+          totalCount = cj.count ?? edges.length;
+        }
+      } else {
+        const countRes = await adminRest<{ count: number }>('/products/count.json');
+        totalCount = countRes?.count ?? edges.length;
+      }
+    } catch {
+      // keep fallback
+    }
+
+    res.json({
+      success: true,
+      shop,
+      totalCount,
+      sampleTitles,
+    });
+  } catch (err: any) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// 9. Batch Delete All Products from Shopify
+app.post('/api/shopify/delete-all-products', async (req: Request, res: Response) => {
+  try {
+    const { confirmCode, customShop, customToken, maxBatch = 250 } = req.body || {};
+
+    if (confirmCode !== 'CONFIRM_DELETE' && confirmCode !== 'DELETE_ALL_PRODUCTS' && confirmCode !== '确认删除全部') {
+      return res.status(400).json({
+        success: false,
+        error: '安全校验失败：必须输入 "CONFIRM_DELETE" 或 "确认删除全部" 确认指令',
+      });
+    }
+
+    const shop = (customShop || tokenManager.shop || '').trim();
+    if (!shop) {
+      return res.status(400).json({ success: false, error: 'Shopify 店铺域名未配置' });
+    }
+
+    const GET_BATCH_QUERY = `
+      query getProductsToDelete($first: Int!) {
+        products(first: $first) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          edges {
+            node {
+              id
+              title
+            }
+          }
+        }
+      }
+    `;
+
+    const DELETE_MUTATION = `
+      mutation deleteProduct($input: ProductDeleteInput!) {
+        productDelete(input: $input) {
+          deletedProductId
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const runGraphql = async (q: string, vars: any = {}) => {
+      if (customShop && customToken) {
+        const s = customShop.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        const cleanShop = s.includes('.') ? s : `${s}.myshopify.com`;
+        const url = `https://${cleanShop}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': customToken.trim() },
+          body: JSON.stringify({ query: q, variables: vars }),
+        });
+        const t = await r.text();
+        if (!r.ok) throw new Error(`Shopify GraphQL ${r.status}: ${t.slice(0, 300)}`);
+        const json = JSON.parse(t);
+        if (json.errors?.length) throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`);
+        return json.data;
+      }
+      return await adminGraphql(q, vars);
+    };
+
+    let totalDeleted = 0;
+    const deletedItems: { id: string; title: string }[] = [];
+    const errors: string[] = [];
+
+    let hasMore = true;
+    let iteration = 0;
+    const maxIterations = 20;
+
+    while (hasMore && iteration < maxIterations && totalDeleted < maxBatch) {
+      iteration++;
+      const batchSize = Math.min(50, maxBatch - totalDeleted);
+      const queryData = await runGraphql(GET_BATCH_QUERY, { first: batchSize });
+      const edges = queryData?.products?.edges || [];
+
+      if (edges.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const edge of edges) {
+        const { id, title } = edge.node;
+        try {
+          const delRes = await runGraphql(DELETE_MUTATION, { input: { id } });
+          const userErrs = delRes?.productDelete?.userErrors || [];
+          if (userErrs.length > 0) {
+            errors.push(`${title}: ${userErrs.map((e: any) => e.message).join(', ')}`);
+          } else {
+            totalDeleted++;
+            deletedItems.push({ id, title });
+          }
+        } catch (delErr: any) {
+          errors.push(`${title}: ${delErr.message}`);
+        }
+
+        // Small throttle to stay well below Shopify API rate limit
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+
+      if (edges.length < batchSize) {
+        hasMore = false;
+      }
+    }
+
+    res.json({
+      success: true,
+      deletedCount: totalDeleted,
+      deletedItems,
+      errors,
+      hasMore,
+    });
+  } catch (err: any) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
 // --- Vite middleware integration ---
 async function startServer() {
   if (!isProd) {
@@ -475,7 +884,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
+    const distPath = path.resolve(import.meta.dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(distPath, 'index.html'));

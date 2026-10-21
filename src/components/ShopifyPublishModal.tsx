@@ -12,6 +12,7 @@ interface ShopifyPublishModalProps {
   onExecuteSync: (mode: 'full' | 'stock_only', isDryRun: boolean) => Promise<void>;
   isSyncing: boolean;
   syncLogs: string[];
+  onOpenCleanupModal?: () => void;
 }
 
 export const ShopifyPublishModal: React.FC<ShopifyPublishModalProps> = ({
@@ -24,6 +25,7 @@ export const ShopifyPublishModal: React.FC<ShopifyPublishModalProps> = ({
   onExecuteSync,
   isSyncing,
   syncLogs,
+  onOpenCleanupModal,
 }) => {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; locations?: any[] } | null>(null);

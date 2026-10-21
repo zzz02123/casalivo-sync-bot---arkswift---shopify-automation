@@ -210,56 +210,104 @@ export const WhitewashPricingPanel: React.FC<WhitewashPricingPanelProps> = ({
                 ))}
               </div>
 
-              {/* Extra Pricing Controls */}
-              <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-400 mb-1">尾数价格规整</label>
-                  <select
-                    value={pricingConfig.rounding}
-                    onChange={(e) => onUpdatePricing({ ...pricingConfig, rounding: e.target.value as any })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="99">.99 心理价 (如 €79.99)</option>
-                    <option value="95">.95 促销价 (如 €79.95)</option>
-                    <option value="integer">取整整数 (如 €80.00)</option>
-                    <option value="none">保留原计算两位小数</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1">划线原价 (MSRP) 倍率</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={pricingConfig.compareAtMultiplier}
-                      onChange={(e) =>
-                        onUpdatePricing({
-                          ...pricingConfig,
-                          compareAtMultiplier: parseFloat(e.target.value) || 1.3,
-                        })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
-                    />
-                    <span className="text-slate-500">×售价</span>
+              {/* GMC Protection Notice Banner & Extra Pricing Controls */}
+              <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-3 text-xs">
+                {/* GMC Compare-at price toggle */}
+                <div className="p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors duration-200 bg-slate-900/90 border-slate-700">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs">
+                        划线吊牌价 (Compare-At Price / 促销划线价)
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${pricingConfig.enableCompareAtPrice ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                        {pricingConfig.enableCompareAtPrice ? '已开启' : '已关闭 (GMC 安全模式)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      {pricingConfig.enableCompareAtPrice
+                        ? '已启用划线原价展示。请确保已有真实销售记录或参考价格。'
+                        : '已遵循 GMC (Google Merchant Center) 规范关闭虚假划线价，Shopify 前台及导出的 CSV 中划线价为空，仅保留真实售价。'}
+                    </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdatePricing({
+                        ...pricingConfig,
+                        enableCompareAtPrice: !pricingConfig.enableCompareAtPrice,
+                      })
+                    }
+                    className={`shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs transition flex items-center gap-1.5 ${
+                      pricingConfig.enableCompareAtPrice
+                        ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                  >
+                    {pricingConfig.enableCompareAtPrice ? '关闭吊牌价 (推荐)' : '开启吊牌价'}
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-slate-400 mb-1">单件附加杂费 / 运费</label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500">€</span>
-                    <input
-                      type="number"
-                      value={pricingConfig.shippingFee}
-                      onChange={(e) =>
-                        onUpdatePricing({
-                          ...pricingConfig,
-                          shippingFee: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                {!pricingConfig.enableCompareAtPrice && (
+                  <div className="p-2.5 bg-amber-950/40 border border-amber-800/60 rounded-lg text-[11px] text-amber-200/90 flex items-start gap-2">
+                    <span className="text-base shrink-0 leading-none">🛡️</span>
+                    <div>
+                      <strong>GMC 防封提示：</strong> 新独立站未有充分历史销售记录前若标注划线原价，Google GMC 审核会直接判定“虚假折扣 / 不实陈述 (Misrepresentation)”导致封号。待 GMC 审核通过稳定后，再开启此开关配置促销划线价。
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
+                  <div>
+                    <label className="block text-slate-400 mb-1">尾数价格规整</label>
+                    <select
+                      value={pricingConfig.rounding}
+                      onChange={(e) => onUpdatePricing({ ...pricingConfig, rounding: e.target.value as any })}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
-                    />
+                    >
+                      <option value="99">.99 心理价 (如 €79.99)</option>
+                      <option value="95">.95 促销价 (如 €79.95)</option>
+                      <option value="integer">取整整数 (如 €80.00)</option>
+                      <option value="none">保留原计算两位小数</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">划线原价倍率 (若开启)</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        step="0.05"
+                        disabled={!pricingConfig.enableCompareAtPrice}
+                        value={pricingConfig.compareAtMultiplier}
+                        onChange={(e) =>
+                          onUpdatePricing({
+                            ...pricingConfig,
+                            compareAtMultiplier: parseFloat(e.target.value) || 1.3,
+                          })
+                        }
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400 disabled:opacity-40"
+                      />
+                      <span className="text-slate-500">×售价</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">单件附加杂费 / 运费</label>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500">€</span>
+                      <input
+                        type="number"
+                        value={pricingConfig.shippingFee}
+                        onChange={(e) =>
+                          onUpdatePricing({
+                            ...pricingConfig,
+                            shippingFee: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -306,9 +354,15 @@ export const WhitewashPricingPanel: React.FC<WhitewashPricingPanelProps> = ({
                     <div className="text-xl font-extrabold text-amber-400 font-mono">
                       €{simResult.sellingPrice.toFixed(2)}
                     </div>
-                    <div className="text-[10px] text-slate-500 line-through">
-                      原价 €{simResult.compareAtPrice.toFixed(2)}
-                    </div>
+                    {pricingConfig.enableCompareAtPrice && simResult.compareAtPrice > 0 ? (
+                      <div className="text-[10px] text-slate-500 line-through">
+                        原价 €{simResult.compareAtPrice.toFixed(2)}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-emerald-400 font-medium">
+                        吊牌价已关闭 (GMC安全)
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
@@ -444,6 +498,33 @@ export const WhitewashPricingPanel: React.FC<WhitewashPricingPanelProps> = ({
                     </button>
                   </span>
                 ))}
+              </div>
+            </div>
+
+            {/* Category & Tags Automation Card */}
+            <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-amber-400" />
+                <h4 className="text-xs font-bold text-white">
+                  Aosom 英文三级类目与 Shopify 标准类目双向映射引擎
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                按照平台规范，供应商表格中的三级英文目录（如 <code className="text-amber-300 font-mono">Greenhouse</code>、<code className="text-amber-300 font-mono">Nightstands</code>、<code className="text-amber-300 font-mono">Sun Loungers</code>、<code className="text-amber-300 font-mono">Camping & Hiking</code>）将自动执行：
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800">
+                  <span className="text-amber-400 font-bold block mb-1">🏷️ 自动填入产品 Tags 标签</span>
+                  <span className="text-slate-400 text-[11px]">
+                    保留原始英文三级类目为 Tag，利于按精准品类过滤聚合与投放。
+                  </span>
+                </div>
+                <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800">
+                  <span className="text-sky-400 font-bold block mb-1">🗂️ 自动映射 Shopify 1-2 级官方类目</span>
+                  <span className="text-slate-400 text-[11px]">
+                    自动映射标准类目（例如 <code className="text-slate-300 font-mono">Home & Garden &gt; Lawn & Garden</code>），确保 Shopify 后台 Category 列不再留空。
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -79,6 +79,42 @@ GROUP_RULES = [
 ]
 
 
+SHOPIFY_TAXONOMY = {
+    "greenhouse": "Home & Garden > Lawn & Garden > Gardening > Greenhouses",
+    "nightstands": "Furniture > Bedroom Furniture > Nightstands",
+    "storage trolleys": "Furniture > Carts & Islands > Kitchen & Dining Carts",
+    "trash cans": "Home & Garden > Household Supplies > Waste Containment > Trash Cans",
+    "sofa beds & chaise lounges": "Furniture > Living Room Furniture > Sofas",
+    "storage cabinets": "Furniture > Cabinets & Storage > Storage Cabinets & Lockers",
+    "awnings": "Hardware > Building Materials > Canopies & Awnings",
+    "garden furniture sets": "Furniture > Outdoor Furniture > Outdoor Furniture Sets",
+    "sun loungers": "Furniture > Outdoor Furniture > Outdoor Chairs > Sunloungers",
+    "parasol umbrellas & accessories": "Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades",
+    "tables": "Furniture > Tables > Kitchen & Dining Room Tables",
+    "shade sails": "Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades",
+    "charcoal grills": "Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Grills",
+    "bookcases & shelves": "Furniture > Shelving > Bookcases & Standing Shelves",
+    "camping & hiking": "Sporting Goods > Outdoor Recreation > Camping & Hiking",
+    "pet supplies": "Animals & Pet Supplies > Pet Supplies",
+}
+
+
+def shopify_standard_category(category_en: str) -> str:
+    low = (category_en or "").lower().strip()
+    if low in SHOPIFY_TAXONOMY:
+        return SHOPIFY_TAXONOMY[low]
+    for k, v in SHOPIFY_TAXONOMY.items():
+        if k in low or low in k:
+            return v
+    if any(w in low for w in ("garden", "greenhouse", "outdoor", "awning", "parasol")):
+        return "Home & Garden > Lawn & Garden"
+    if any(w in low for w in ("furniture", "chair", "table", "bed", "sofa", "shelf", "cabinet")):
+        return "Furniture > Living Room Furniture"
+    if any(w in low for w in ("cat", "dog", "pet")):
+        return "Animals & Pet Supplies > Pet Supplies"
+    return "Home & Garden > Lawn & Garden"
+
+
 def spanish_group(category_en: str) -> str:
     low = (category_en or "").lower()
     for group, keys in GROUP_RULES:
@@ -323,8 +359,10 @@ def main() -> None:
         category_es = spanish_group(category_en)
         body = build_body(row, idx, sku)
         handle = f"{slug(brand_sku)}-{slug(raw_name)}"
+        category_std = shopify_standard_category(category_en)
 
-        tags = [BRAND, "Envío desde Europa", "Stock verificado", category_es or category]
+        # Requirement 1: English 3rd-level category name into tags
+        tags = [t for t in [BRAND, "Envío desde Europa", "Stock verificado", category_en, category_es] if t]
         seo_title = title[:70]
         seo_desc = (scrub(raw_name) + " - Envío en 3-5 días desde almacén europeo. Garantía 12 meses.")[:160]
 
@@ -333,7 +371,7 @@ def main() -> None:
             "Title": title,
             "Body (HTML)": body,
             "Vendor": BRAND,
-            "Product Category": "",
+            "Product Category": category_std,
             "Type": category,
             "Tags": ", ".join(dict.fromkeys(tags)),
             "Published": "TRUE",
@@ -346,7 +384,7 @@ def main() -> None:
             "Variant Inventory Policy": "deny",
             "Variant Fulfillment Service": "manual",
             "Variant Price": f"{price['price']:.2f}",
-            "Variant Compare At Price": f"{price['compare_at_price']:.2f}",
+            "Variant Compare At Price": "",  # GMC Protection: 默认不填划线价防虚假判定
             "Variant Requires Shipping": "TRUE",
             "Variant Taxable": "TRUE",
             "Variant Barcode": "",

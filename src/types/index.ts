@@ -11,6 +11,9 @@ export interface ArkSwiftRawItem {
   description?: string;
   weight?: number; // in kg
   dimensions?: string;
+  mainColor?: string;
+  englishCategory?: string;
+  features?: string;
   selected?: boolean;
 }
 
@@ -24,13 +27,18 @@ export interface CleansedProduct {
   originalVendor: string;
   costPrice: number;
   price: number; // Selling price in EUR
-  compareAtPrice: number; // Strikethrough MSRP
+  compareAtPrice: number; // Strikethrough MSRP (0 if disabled)
   profitMargin: number; // Percentage, e.g. 52.3%
   profitAmount: number; // in EUR
   stock: number;
   availableStock: number; // after safety buffer
   images: string[];
-  category: string;
+  category: string; // Product type / category
+  englishCategory?: string; // Aosom 3rd-level category (e.g. Greenhouse, Nightstands)
+  shopifyCategory?: string; // Auto-mapped Shopify 1-2 level category, e.g. Home & Garden > Lawn & Garden
+  googleProductCategory?: string; // Auto-mapped Google Shopping category for GMC
+  mainColor?: string;
+  dimensions?: string;
   tags: string[];
   descriptionHtml: string;
   status: 'active' | 'draft';
@@ -38,6 +46,47 @@ export interface CleansedProduct {
   lastSyncAt?: string;
   shopifyId?: string;
   errorMessage?: string;
+}
+
+export interface GroupedProductVariant {
+  id: string;
+  sku: string;
+  originalSku: string;
+  optionName: string; // e.g. "Tamaño / Medidas" or "Color"
+  optionValue: string; // e.g. "81x26x34,5 cm"
+  price: number;
+  compareAtPrice: number;
+  stock: number;
+  availableStock: number;
+  costPrice: number;
+  weight?: number;
+  barcode?: string;
+  image: string;
+}
+
+export interface GroupedProductListing {
+  id: string;
+  handle: string;
+  vendor: string;
+  title: string; // SEO-optimized unified Spanish title
+  originalBaseTitle: string;
+  category: string;
+  englishCategory: string; // Aosom 3rd-level category (e.g. Greenhouse, Camping & Hiking)
+  shopifyCategory: string; // Standard 1-2 level category, never blank
+  googleProductCategory: string;
+  tags: string[];
+  optionName: string; // e.g. "Tamaño / Medidas" or "Color"
+  variants: GroupedProductVariant[];
+  priceMin: number;
+  priceMax: number;
+  totalStock: number;
+  totalAvailableStock: number;
+  images: string[];
+  descriptionHtml: string; // SEO-optimized description with comparison matrix table
+  seoTitle: string;
+  seoDescription: string;
+  syncStatus: 'idle' | 'pending' | 'success' | 'failed';
+  shopifyId?: string;
 }
 
 export interface PricingTier {
@@ -52,6 +101,7 @@ export interface PricingTier {
 export interface PricingConfig {
   tiers: PricingTier[];
   rounding: '99' | '95' | 'integer' | 'none';
+  enableCompareAtPrice: boolean; // 是否启用划线吊牌价 (GMC 审核建议关闭，防止被判定虚假促销)
   compareAtMultiplier: number; // e.g. 1.35x
   shippingFee: number;
   taxRatePercent: number; // e.g. 0 or 21%

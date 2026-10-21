@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Play, Download, UploadCloud, ShieldCheck, ShoppingBag, Database, FileSpreadsheet } from 'lucide-react';
+import { RefreshCw, Play, UploadCloud, ShieldCheck, ShoppingBag, Database, FileSpreadsheet } from 'lucide-react';
 import { ShopifyConfig, ArkSwiftConfig } from '../types';
 
 interface HeaderProps {
@@ -13,6 +13,7 @@ interface HeaderProps {
   onOpenUploadModal: () => void;
   onTriggerFullSync: () => void;
   onExportShopifyCsv?: () => void;
+  onOpenCleanupModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUploadModal,
   onTriggerFullSync,
   onExportShopifyCsv,
+  onOpenCleanupModal,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-30 shadow-md">
@@ -91,16 +93,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <UploadCloud className="w-3.5 h-3.5 text-sky-400" />
             <span className="hidden sm:inline">导入表格</span>
-          </button>
-
-          {/* Export Python Bot */}
-          <button
-            onClick={onOpenPythonModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition"
-            title="生成并在本地 Windows/服务器运行的独立脚本"
-          >
-            <Download className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">导出 Python 脚本</span>
           </button>
 
           {/* Export Shopify CSV */}

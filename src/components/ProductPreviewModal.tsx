@@ -1,23 +1,48 @@
-import React from 'react';
-import { X, Check, ShieldCheck, Truck, RotateCcw, Star, ShoppingCart } from 'lucide-react';
-import { CleansedProduct } from '../types';
+import React, { useState } from 'react';
+import { X, Check, ShieldCheck, Truck, RotateCcw, Star, ShoppingCart, Layers } from 'lucide-react';
+import { CleansedProduct, GroupedProductListing, GroupedProductVariant } from '../types';
 
 interface ProductPreviewModalProps {
   product: CleansedProduct | null;
+  listing?: GroupedProductListing | null;
   onClose: () => void;
 }
 
-export const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ product, onClose }) => {
-  if (!product) return null;
+export const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ product, listing, onClose }) => {
+  const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
+
+  if (!product && !listing) return null;
+
+  const isListing = Boolean(listing && listing.variants && listing.variants.length > 0);
+  const variants = isListing ? listing!.variants : [];
+  const currentVariant: GroupedProductVariant | null = isListing ? variants[selectedVariantIdx] || variants[0] : null;
+
+  const displayTitle = listing ? listing.title : product!.title;
+  const displayVendor = listing ? listing.vendor : product!.vendor;
+  const displayCategory = listing ? listing.category : product!.category;
+  const displayEnglishCat = listing ? listing.englishCategory : product!.englishCategory;
+  const displayShopifyCat = listing ? listing.shopifyCategory : product!.shopifyCategory;
+  const displayPrice = currentVariant ? currentVariant.price : product!.price;
+  const displayCompareAt = currentVariant ? currentVariant.compareAtPrice : product!.compareAtPrice;
+  const displaySku = currentVariant ? currentVariant.sku : product!.sku;
+  const displayStock = currentVariant ? currentVariant.availableStock : product!.availableStock;
+  const displayImages = listing ? listing.images : product!.images;
+  const displayImage = currentVariant?.image || displayImages[0];
+  const displayDescHtml = listing ? listing.descriptionHtml : product!.descriptionHtml;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white text-slate-900 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl my-6">
+      <div className="bg-white text-slate-900 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl my-6 flex flex-col max-h-[90vh]">
         {/* Mock Storefront Header */}
-        <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between border-b border-slate-800">
+        <div className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center space-x-2">
             <span className="font-bold text-amber-400 tracking-tight text-sm">CASALIVO</span>
-            <span className="text-slate-500 text-xs">| 独立站商品详情页实时渲染模拟</span>
+            <span className="text-slate-500 text-xs">| 独立站单个 Listing 详情页渲染模拟</span>
+            {isListing && (
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded font-bold">
+                主体包含 {variants.length} 个子变体
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
             <X className="w-5 h-5" />
@@ -25,20 +50,31 @@ export const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ produc
         </div>
 
         {/* Storefront Layout */}
-        <div className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 overflow-y-auto">
           {/* Gallery */}
           <div className="space-y-3">
             <div className="aspect-square rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-inner">
               <img
-                src={product.images[0]}
-                alt={product.title}
-                className="w-full h-full object-cover"
+                src={displayImage}
+                alt={displayTitle}
+                className="w-full h-full object-cover transition-all duration-300"
               />
             </div>
-            {product.images.length > 1 && (
-              <div className="flex gap-2">
-                {product.images.slice(0, 4).map((img, i) => (
-                  <div key={i} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
+            {displayImages.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {displayImages.slice(0, 5).map((img, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      if (isListing) {
+                        const matchVarIdx = variants.findIndex((v) => v.image === img);
+                        if (matchVarIdx >= 0) setSelectedVariantIdx(matchVarIdx);
+                      }
+                    }}
+                    className={`w-14 h-14 rounded-lg overflow-hidden border cursor-pointer shrink-0 transition ${
+                      displayImage === img ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-slate-200 opacity-70 hover:opacity-100'
+                    }`}
+                  >
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </div>
                 ))}
@@ -49,31 +85,82 @@ export const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ produc
           {/* Product Details */}
           <div className="space-y-4">
             <div>
-              <div className="text-xs uppercase tracking-wider text-indigo-600 font-semibold mb-1">
-                {product.vendor} • {product.category}
+              <div className="text-xs uppercase tracking-wider text-indigo-600 font-semibold mb-1 flex flex-wrap items-center gap-1.5">
+                <span>{displayVendor} • {displayCategory}</span>
+                {displayEnglishCat && (
+                  <span className="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-mono">
+                    Tag: {displayEnglishCat}
+                  </span>
+                )}
+                {displayShopifyCat && (
+                  <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded">
+                    {displayShopifyCat}
+                  </span>
+                )}
               </div>
-              <h2 className="text-xl font-bold text-slate-900 leading-snug">{product.title}</h2>
+              <h2 className="text-lg md:text-xl font-bold text-slate-900 leading-snug">{displayTitle}</h2>
               <div className="text-xs text-slate-500 font-mono mt-1 flex items-center gap-2">
-                <span>SKU: {product.sku}</span>
+                <span>SKU: <strong className="text-slate-800">{displaySku}</strong></span>
                 <span>•</span>
                 <span className="text-emerald-600 font-medium flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> 现货充足 ({product.availableStock} 件)
+                  <Check className="w-3.5 h-3.5" /> 现货 ({displayStock} 件)
                 </span>
               </div>
             </div>
 
             {/* Price Box */}
             <div className="flex items-baseline space-x-3 p-3 bg-amber-50/70 rounded-xl border border-amber-200/80">
-              <span className="text-3xl font-extrabold text-slate-900">€{product.price.toFixed(2)}</span>
-              {product.compareAtPrice > product.price && (
+              <span className="text-3xl font-extrabold text-slate-900">€{displayPrice.toFixed(2)}</span>
+              {displayCompareAt > displayPrice ? (
                 <span className="text-base text-slate-400 line-through">
-                  €{product.compareAtPrice.toFixed(2)}
+                  €{displayCompareAt.toFixed(2)}
+                </span>
+              ) : (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                  🛡️ GMC合规原价 (无虚假划线)
                 </span>
               )}
               <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-600 text-white">
                 包邮含税
               </span>
             </div>
+
+            {/* Variant Option Selector (When multi-variant) */}
+            {isListing && variants.length > 1 && (
+              <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>选择 {listing!.optionName}:</span>
+                  </label>
+                  <span className="text-xs font-bold text-indigo-600">
+                    {currentVariant?.optionValue}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {variants.map((v, idx) => {
+                    const isSelected = idx === selectedVariantIdx;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setSelectedVariantIdx(idx)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/20'
+                            : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'
+                        }`}
+                      >
+                        <span>{v.optionValue}</span>
+                        <span className={`text-[10px] font-mono ${isSelected ? 'text-amber-300' : 'text-slate-500'}`}>
+                          (€{v.price.toFixed(2)})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* CTA Button */}
             <button className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md transition">
@@ -97,10 +184,10 @@ export const ProductPreviewModal: React.FC<ProductPreviewModalProps> = ({ produc
               </div>
             </div>
 
-            {/* Description Preview */}
-            <div className="text-xs text-slate-600 leading-relaxed max-h-36 overflow-y-auto pr-1">
+            {/* Description Preview (With Specifications Table) */}
+            <div className="text-xs text-slate-600 leading-relaxed max-h-48 overflow-y-auto pr-1">
               <div
-                dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+                dangerouslySetInnerHTML={{ __html: displayDescHtml }}
               />
             </div>
           </div>

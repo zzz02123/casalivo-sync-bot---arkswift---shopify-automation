@@ -6,12 +6,14 @@ interface DashboardStatsProps {
   products: CleansedProduct[];
   pricingConfig: PricingConfig;
   whitewashConfig: WhitewashConfig;
+  masterListingCount?: number;
 }
 
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   products,
   pricingConfig,
   whitewashConfig,
+  masterListingCount,
 }) => {
   const totalCount = products.length;
   const inStockCount = products.filter((p) => p.availableStock > 0).length;
@@ -32,15 +34,17 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 mb-6">
-      {/* 1. Total Products */}
+      {/* 1. Master Listings / Variants */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
         <div className="flex items-center justify-between text-slate-400 mb-1.5">
-          <span className="text-xs font-medium">总商品数</span>
-          <Package className="w-4 h-4 text-indigo-400" />
+          <span className="text-xs font-medium">主体 Listing</span>
+          <Layers className="w-4 h-4 text-indigo-400" />
         </div>
-        <div className="text-2xl font-bold text-white tracking-tight">{totalCount}</div>
+        <div className="text-2xl font-bold text-white tracking-tight">
+          {masterListingCount !== undefined ? masterListingCount : totalCount}
+        </div>
         <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-          <span className="text-emerald-400 font-medium">100%</span> 已自动洗白编码
+          <span className="text-indigo-400 font-semibold">{totalCount} 个</span> 子变体 SKU (Aosom母子归集)
         </div>
       </div>
 

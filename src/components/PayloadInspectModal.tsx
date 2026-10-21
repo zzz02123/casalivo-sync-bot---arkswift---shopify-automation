@@ -1,48 +1,89 @@
 import React, { useState } from 'react';
-import { X, Code, Copy, Check, Terminal } from 'lucide-react';
-import { CleansedProduct, ShopifyConfig } from '../types';
+import { X, Code, Copy, Check, Terminal, Layers } from 'lucide-react';
+import { CleansedProduct, GroupedProductListing, ShopifyConfig } from '../types';
 
 interface PayloadInspectModalProps {
   product: CleansedProduct | null;
+  listing?: GroupedProductListing | null;
   shopifyConfig: ShopifyConfig;
   onClose: () => void;
 }
 
 export const PayloadInspectModal: React.FC<PayloadInspectModalProps> = ({
   product,
+  listing,
   shopifyConfig,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
 
-  if (!product) return null;
+  if (!product && !listing) return null;
 
-  const payload = {
-    product: {
-      title: product.title,
-      body_html: product.descriptionHtml,
-      vendor: product.vendor,
-      product_type: product.category,
-      tags: product.tags.join(', '),
-      status: product.status,
-      images: product.images.map((src) => ({ src })),
-      variants: [
-        {
-          sku: product.sku,
-          price: product.price.toFixed(2),
-          compare_at_price: product.compareAtPrice.toFixed(2),
-          inventory_management: 'shopify',
-          inventory_policy: 'deny',
-          fulfillment_service: 'manual',
-          requires_shipping: true,
+  const isListing = Boolean(listing && listing.variants && listing.variants.length > 0);
+
+  const payload = isListing
+    ? {
+        product: {
+          title: listing!.title,
+          body_html: listing!.descriptionHtml,
+          vendor: listing!.vendor,
+          product_category: listing!.shopifyCategory || 'Home & Garden > Lawn & Garden',
+          product_type: listing!.category,
+          tags: listing!.tags.join(', '),
+          status: 'active',
+          images: listing!.images.slice(0, 8).map((src) => ({ src })),
+          options: [
+            {
+              name: listing!.optionName,
+              values: listing!.variants.map((v) => v.optionValue),
+            },
+          ],
+          variants: listing!.variants.map((v) => ({
+            option1: v.optionValue,
+            sku: v.sku,
+            price: v.price.toFixed(2),
+            compare_at_price: v.compareAtPrice > 0 ? v.compareAtPrice.toFixed(2) : null,
+            inventory_management: 'shopify',
+            inventory_policy: 'deny',
+            fulfillment_service: 'manual',
+            requires_shipping: true,
+            barcode: v.barcode || null,
+          })),
         },
-      ],
-    },
-    inventory_adjustment: {
-      location_id: shopifyConfig.locationId || 'LOC_DEFAULT',
-      available: product.availableStock,
-    },
-  };
+        inventory_adjustments: listing!.variants.map((v) => ({
+          sku: v.sku,
+          location_id: shopifyConfig.locationId || 'LOC_DEFAULT',
+          available: v.availableStock,
+        })),
+        note: 'Uploaded as ONE Shopify Product Listing containing all child variants',
+      }
+    : {
+        product: {
+          title: product!.title,
+          body_html: product!.descriptionHtml,
+          vendor: product!.vendor,
+          product_category: product!.shopifyCategory || 'Home & Garden > Lawn & Garden',
+          product_type: product!.category,
+          tags: product!.tags.join(', '),
+          status: product!.status,
+          images: product!.images.map((src) => ({ src })),
+          variants: [
+            {
+              sku: product!.sku,
+              price: product!.price.toFixed(2),
+              compare_at_price: product!.compareAtPrice > 0 ? product!.compareAtPrice.toFixed(2) : null,
+              inventory_management: 'shopify',
+              inventory_policy: 'deny',
+              fulfillment_service: 'manual',
+              requires_shipping: true,
+            },
+          ],
+        },
+        inventory_adjustment: {
+          location_id: shopifyConfig.locationId || 'LOC_DEFAULT',
+          available: product!.availableStock,
+        },
+      };
 
   const jsonString = JSON.stringify(payload, null, 2);
 
@@ -63,10 +104,17 @@ export const PayloadInspectModal: React.FC<PayloadInspectModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Shopify Admin API Payload 原始报文
-                <span className="text-[10px] bg-slate-800 text-amber-300 font-mono px-2 py-0.5 rounded border border-slate-700">
-                  {product.sku}
-                </span>
+                Shopify Admin API Payload 报文
+                {isListing ? (
+                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    单个 Listing (下挂 {listing!.variants.length} 个子变体)
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-800 text-amber-300 font-mono px-2 py-0.5 rounded border border-slate-700">
+                    {product!.sku}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-400">
                 POST https://{shopifyConfig.shopDomain || 'store.myshopify.com'}/admin/api/2024-04/products.json

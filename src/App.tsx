@@ -9,10 +9,12 @@ import { PythonScriptModal } from './components/PythonScriptModal';
 import { CsvUploadModal } from './components/CsvUploadModal';
 import { ProductPreviewModal } from './components/ProductPreviewModal';
 import { PayloadInspectModal } from './components/PayloadInspectModal';
+import { ShopifyStoreCleanupModal } from './components/ShopifyStoreCleanupModal';
 
 import {
   ArkSwiftRawItem,
   CleansedProduct,
+  GroupedProductListing,
   ShopifyConfig,
   ArkSwiftConfig,
   WhitewashConfig,
@@ -24,7 +26,7 @@ import {
   DEFAULT_WHITEWASH_CONFIG,
   transformArkSwiftItem,
 } from './utils/whitewashEngine';
-import { downloadShopifyCsv } from './utils/shopifyCsvExporter';
+import { downloadShopifyCsv, groupProductsIntoListings } from './utils/shopifyCsvExporter';
 
 export default function App() {
   // --- States ---
@@ -87,7 +89,7 @@ export default function App() {
       });
   }, []);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
 
@@ -95,11 +97,24 @@ export default function App() {
   const [showShopifyModal, setShowShopifyModal] = useState(false);
   const [showPythonModal, setShowPythonModal] = useState(false);
   const [showCsvModal, setShowCsvModal] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [previewProduct, setPreviewProduct] = useState<CleansedProduct | null>(null);
+  const [previewListing, setPreviewListing] = useState<GroupedProductListing | null>(null);
   const [inspectProduct, setInspectProduct] = useState<CleansedProduct | null>(null);
+  const [inspectListing, setInspectListing] = useState<GroupedProductListing | null>(null);
 
   // Sync statuses dictionary to preserve statuses across rule changes
   const [syncStatusMap, setSyncStatusMap] = useState<Record<string, { status: 'idle' | 'pending' | 'success' | 'failed'; shopifyId?: string }>>({});
+
+  // Raw items lookup map for fast SKU / ID resolution
+  const rawItemsMap = useMemo(() => {
+    const map = new Map<string, ArkSwiftRawItem>();
+    rawProducts.forEach((item) => {
+      map.set(item.originalSku, item);
+      map.set(item.id, item);
+    });
+    return map;
+  }, [rawProducts]);
 
   // --- Transform ArkSwift items into Casalivo Cleansed Products ---
   const cleansedProducts = useMemo(() => {
@@ -114,70 +129,86 @@ export default function App() {
     });
   }, [rawProducts, whitewashConfig, pricingConfig, syncStatusMap]);
 
+  // --- Smart Grouped Listings (Aosom母子变体归集: 1个主体包含全部子变体) ---
+  const groupedListings = useMemo(() => {
+    return groupProductsIntoListings(cleansedProducts, rawItemsMap);
+  }, [cleansedProducts, rawItemsMap]);
+
   // --- Handlers ---
-  const handleToggleSelect = (id: string) => {
-    setSelectedIds((prev) =>
+  const handleToggleSelectListing = (id: string) => {
+    setSelectedListingIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  const handleSelectAll = (select: boolean) => {
+  const handleSelectAllListings = (select: boolean) => {
     if (select) {
-      setSelectedIds(cleansedProducts.map((p) => p.id));
+      setSelectedListingIds(groupedListings.map((l) => l.id));
     } else {
-      setSelectedIds([]);
+      setSelectedListingIds([]);
     }
   };
 
   const handleImportCsv = (newItems: ArkSwiftRawItem[]) => {
     setRawProducts(newItems);
-    setSelectedIds([]);
+    setSelectedListingIds([]);
     setSyncLogs((prev) => [
-      `[${new Date().toLocaleTimeString()}] 成功导入 ${newItems.length} 件 ArkSwift 原始商品数据并自动洗白`,
+      `[${new Date().toLocaleTimeString()}] 成功导入 ${newItems.length} 件 Aosom/ArkSwift 原始商品数据并自动按型号、尺寸与颜色聚类为主体 Listing`,
       ...prev,
     ]);
   };
 
-  // Export cleansed products as official Shopify CSV
-  const handleExportShopifyCsv = (productsToExport?: CleansedProduct[]) => {
-    const list = productsToExport && productsToExport.length > 0 ? productsToExport : cleansedProducts;
-    const rawMap = new Map<string, ArkSwiftRawItem>();
-    rawProducts.forEach((item) => {
-      rawMap.set(item.originalSku, item);
-      rawMap.set(item.id, item);
-    });
+  // Export cleansed products as official Shopify Multi-Variant CSV (1 Handle per master listing)
+  const handleExportShopifyCsv = (listingsToExport?: GroupedProductListing[]) => {
+    const targetProducts =
+      listingsToExport && listingsToExport.length > 0
+        ? cleansedProducts.filter((p) =>
+            listingsToExport.some((l) => l.variants.some((v) => v.id === p.id || v.sku === p.sku))
+          )
+        : selectedListingIds.length > 0
+        ? cleansedProducts.filter((p) => {
+            const selectedListings = groupedListings.filter((l) => selectedListingIds.includes(l.id));
+            return selectedListings.some((l) => l.variants.some((v) => v.id === p.id || v.sku === p.sku));
+          })
+        : cleansedProducts;
 
-    downloadShopifyCsv(list, rawMap, `casalivo_shopify_cleansed_${new Date().toISOString().slice(0, 10)}.csv`);
+    const filename = `casalivo_shopify_master_listings_${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadShopifyCsv(targetProducts, rawItemsMap, filename, { mode: 'grouped_variants' });
     setSyncLogs((prev) => [
-      `[${new Date().toLocaleTimeString()}] 📥 成功生成并下载 ${list.length} 件清洗后商品的 Shopify 标准导入 CSV 表格`,
+      `[${new Date().toLocaleTimeString()}] 📥 成功导出 Shopify 官方标准多变体聚合 CSV (主体Listing下包含全部变体，Tag写入英文三级类目，1-2级标准目录自动映射，吊牌划线价符合GMC规范)`,
       ...prev,
     ]);
   };
 
-  // Push single product
-  const handlePushSingle = async (product: CleansedProduct) => {
+  // Push master listing containing all its variants (上传后台为一个 listing)
+  const handlePushListing = async (listing: GroupedProductListing) => {
     setIsSyncing(true);
-    setSyncStatusMap((prev) => ({
-      ...prev,
-      [product.id]: { status: 'pending' },
-    }));
+    setSyncStatusMap((prev) => {
+      const next = { ...prev };
+      listing.variants.forEach((v) => {
+        next[v.id] = { status: 'pending' };
+      });
+      return next;
+    });
 
     try {
       if (shopifyConfig.isConnected && shopifyConfig.shopDomain) {
-        // Server-side token: no credential in the request body
-        const res = await fetch('/api/shopify/publish-product', {
+        const res = await fetch('/api/shopify/publish-listing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ locationId: shopifyConfig.locationId, product }),
+          body: JSON.stringify({ locationId: shopifyConfig.locationId, listing }),
         });
         const data = await res.json();
         if (res.ok && data.success) {
-          setSyncStatusMap((prev) => ({
-            ...prev,
-            [product.id]: { status: 'success', shopifyId: data.productId },
-          }));
+          setSyncStatusMap((prev) => {
+            const next = { ...prev };
+            listing.variants.forEach((v) => {
+              next[v.id] = { status: 'success', shopifyId: data.productId };
+            });
+            return next;
+          });
           setSyncLogs((prev) => [
-            `[${new Date().toLocaleTimeString()}] ✅ 成功推送到 Shopify: ${product.sku} (ID: ${data.productId})`,
+            `[${new Date().toLocaleTimeString()}] ✅ 主体商品发布成功: ${listing.title} (Shopify Product ID: ${data.productId}, 后台作为 1 个 Listing 上架，包含 ${data.variantCount} 个变体)`,
             ...prev,
           ]);
         } else {
@@ -186,22 +217,29 @@ export default function App() {
       } else {
         // Simulated success for demonstration without requiring credentials upfront
         await new Promise((resolve) => setTimeout(resolve, 800));
-        setSyncStatusMap((prev) => ({
-          ...prev,
-          [product.id]: { status: 'success', shopifyId: `mock_${Date.now()}` },
-        }));
+        const mockId = `gid://shopify/Product/mock_${Date.now()}`;
+        setSyncStatusMap((prev) => {
+          const next = { ...prev };
+          listing.variants.forEach((v) => {
+            next[v.id] = { status: 'success', shopifyId: mockId };
+          });
+          return next;
+        });
         setSyncLogs((prev) => [
-          `[${new Date().toLocaleTimeString()}] ✅ [模拟推送完成] ${product.sku}: 标题 "${product.title}" 售价 €${product.price.toFixed(2)} 已就绪 (服务端换取 Admin token 后将直连线上店铺)`,
+          `[${new Date().toLocaleTimeString()}] ✅ [模拟推送就绪] 主体商品: "${listing.title}" 作为 1 个 Listing 上架 (包含 ${listing.variants.length} 个子变体，Aosom英文类目Tag "${listing.englishCategory || ''}"，详情嵌入对比表)`,
           ...prev,
         ]);
       }
     } catch (err: any) {
-      setSyncStatusMap((prev) => ({
-        ...prev,
-        [product.id]: { status: 'failed' },
-      }));
+      setSyncStatusMap((prev) => {
+        const next = { ...prev };
+        listing.variants.forEach((v) => {
+          next[v.id] = { status: 'failed' };
+        });
+        return next;
+      });
       setSyncLogs((prev) => [
-        `[${new Date().toLocaleTimeString()}] ❌ 推送失败 ${product.sku}: ${err.message}`,
+        `[${new Date().toLocaleTimeString()}] ❌ 主体商品推送失败 ${listing.title}: ${err.message}`,
         ...prev,
       ]);
     } finally {
@@ -209,76 +247,90 @@ export default function App() {
     }
   };
 
-  // Batch execute sync from modal
+  // Batch execute sync from modal (1 listing per master product)
   const handleExecuteBatchSync = async (mode: 'full' | 'stock_only', isDryRun: boolean) => {
-    const targetProducts =
-      selectedIds.length > 0
-        ? cleansedProducts.filter((p) => selectedIds.includes(p.id))
-        : cleansedProducts;
+    const targetListings =
+      selectedListingIds.length > 0
+        ? groupedListings.filter((l) => selectedListingIds.includes(l.id))
+        : groupedListings;
 
     setIsSyncing(true);
     setSyncLogs((prev) => [
-      `[${new Date().toLocaleTimeString()}] 🚀 启动批量同步流水线 (模式: ${mode}, 演练: ${isDryRun ? '是' : '否'}, 待处理: ${targetProducts.length} 款)...`,
+      `[${new Date().toLocaleTimeString()}] 🚀 启动主体商品批量同步流水线 (模式: ${mode}, 演练: ${isDryRun ? '是' : '否'}, 待处理: ${targetListings.length} 个主体 Listing)...`,
       ...prev,
     ]);
 
-    for (let i = 0; i < targetProducts.length; i++) {
-      const item = targetProducts[i];
-      setSyncStatusMap((prev) => ({
-        ...prev,
-        [item.id]: { status: 'pending' },
-      }));
+    for (let i = 0; i < targetListings.length; i++) {
+      const listing = targetListings[i];
+      setSyncStatusMap((prev) => {
+        const next = { ...prev };
+        listing.variants.forEach((v) => {
+          next[v.id] = { status: 'pending' };
+        });
+        return next;
+      });
 
-      // Simulate network step
       await new Promise((r) => setTimeout(r, 400));
 
       if (isDryRun) {
         setSyncLogs((prev) => [
-          `[${new Date().toLocaleTimeString()}] 🔍 [沙盒演练 ${i + 1}/${targetProducts.length}] ${item.sku}: 洗白品牌 Casalivo, 供货 €${item.costPrice.toFixed(2)} -> 售价 €${item.price.toFixed(2)} (库存: ${item.availableStock}) 校验通过`,
+          `[${new Date().toLocaleTimeString()}] 🔍 [沙盒演练 ${i + 1}/${targetListings.length}] 主体 "${listing.title}": 包含 ${listing.variants.length} 个变体, 售价区间 €${listing.priceMin.toFixed(2)}~€${listing.priceMax.toFixed(2)}, Aosom英文类目Tag: ${listing.englishCategory}, 官方类目: ${listing.shopifyCategory} 校验通过`,
           ...prev,
         ]);
-        setSyncStatusMap((prev) => ({
-          ...prev,
-          [item.id]: { status: 'success' },
-        }));
+        setSyncStatusMap((prev) => {
+          const next = { ...prev };
+          listing.variants.forEach((v) => {
+            next[v.id] = { status: 'success' };
+          });
+          return next;
+        });
       } else if (shopifyConfig.isConnected && shopifyConfig.shopDomain) {
         try {
-          const res = await fetch('/api/shopify/publish-product', {
+          const res = await fetch('/api/shopify/publish-listing', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ locationId: shopifyConfig.locationId, product: item }),
+            body: JSON.stringify({ locationId: shopifyConfig.locationId, listing }),
           });
           const data = await res.json();
           if (res.ok && data.success) {
-            setSyncStatusMap((prev) => ({
-              ...prev,
-              [item.id]: { status: 'success', shopifyId: data.productId },
-            }));
+            setSyncStatusMap((prev) => {
+              const next = { ...prev };
+              listing.variants.forEach((v) => {
+                next[v.id] = { status: 'success', shopifyId: data.productId };
+              });
+              return next;
+            });
             setSyncLogs((prev) => [
-              `[${new Date().toLocaleTimeString()}] ✅ [${i + 1}/${targetProducts.length}] ${item.sku} 线上同步成功!`,
+              `[${new Date().toLocaleTimeString()}] ✅ [${i + 1}/${targetListings.length}] 主体商品 "${listing.title}" 线上同步成功 (作为 1 个 Listing，包含 ${data.variantCount} 个变体)!`,
               ...prev,
             ]);
           } else {
             throw new Error(data.error);
           }
         } catch (e: any) {
-          setSyncStatusMap((prev) => ({
-            ...prev,
-            [item.id]: { status: 'failed' },
-          }));
+          setSyncStatusMap((prev) => {
+            const next = { ...prev };
+            listing.variants.forEach((v) => {
+              next[v.id] = { status: 'failed' };
+            });
+            return next;
+          });
           setSyncLogs((prev) => [
-            `[${new Date().toLocaleTimeString()}] ❌ [${i + 1}/${targetProducts.length}] ${item.sku} 同步失败: ${e.message}`,
+            `[${new Date().toLocaleTimeString()}] ❌ [${i + 1}/${targetListings.length}] "${listing.title}" 同步失败: ${e.message}`,
             ...prev,
           ]);
         }
       } else {
-        // Mock successful push
-        setSyncStatusMap((prev) => ({
-          ...prev,
-          [item.id]: { status: 'success', shopifyId: `mock_${Date.now()}` },
-        }));
+        const mockId = `gid://shopify/Product/mock_${Date.now()}_${i}`;
+        setSyncStatusMap((prev) => {
+          const next = { ...prev };
+          listing.variants.forEach((v) => {
+            next[v.id] = { status: 'success', shopifyId: mockId };
+          });
+          return next;
+        });
         setSyncLogs((prev) => [
-          `[${new Date().toLocaleTimeString()}] ✅ [${i + 1}/${targetProducts.length}] ${item.sku}: 已按 Casalivo 品牌生成上架数据 (售价: €${item.price.toFixed(2)})`,
+          `[${new Date().toLocaleTimeString()}] ✅ [${i + 1}/${targetListings.length}] 主体商品 "${listing.title}": 包含 ${listing.variants.length} 个子变体已作为 1 个 Listing 上架就绪 (价格 €${listing.priceMin.toFixed(2)} - €${listing.priceMax.toFixed(2)})`,
           ...prev,
         ]);
       }
@@ -332,7 +384,7 @@ export default function App() {
       <Header
         shopifyConfig={shopifyConfig}
         arkswiftConfig={arkswiftConfig}
-        totalProducts={cleansedProducts.length}
+        totalProducts={groupedListings.length}
         isSyncing={isSyncing}
         onOpenShopifyModal={() => setShowShopifyModal(true)}
         onOpenArkSwiftModal={() => {
@@ -343,6 +395,7 @@ export default function App() {
         onOpenUploadModal={() => setShowCsvModal(true)}
         onTriggerFullSync={() => setShowShopifyModal(true)}
         onExportShopifyCsv={() => handleExportShopifyCsv()}
+        onOpenCleanupModal={() => setShowCleanupModal(true)}
       />
 
       {/* Main Container */}
@@ -352,6 +405,7 @@ export default function App() {
           products={cleansedProducts}
           pricingConfig={pricingConfig}
           whitewashConfig={whitewashConfig}
+          masterListingCount={groupedListings.length}
         />
 
         {/* 3. ArkSwift API & Signature Generator Studio */}
@@ -372,16 +426,18 @@ export default function App() {
           onUpdatePricing={setPricingConfig}
         />
 
-        {/* 5. Product Catalog Side-by-Side Comparison & Action Table */}
+        {/* 5. Product Catalog: Master Listings with Variants Table */}
         <ProductCatalogTable
           products={cleansedProducts}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onSelectAll={handleSelectAll}
-          onPushSingle={handlePushSingle}
-          onPreviewProduct={setPreviewProduct}
-          onInspectPayload={setInspectProduct}
+          rawItemsMap={rawItemsMap}
+          selectedListingIds={selectedListingIds}
+          onToggleSelectListing={handleToggleSelectListing}
+          onSelectAllListings={handleSelectAllListings}
+          onPushListing={handlePushListing}
+          onPreviewListing={setPreviewListing}
+          onInspectListingPayload={setInspectListing}
           onExportCsv={handleExportShopifyCsv}
+          onOpenBatchSyncModal={() => setShowShopifyModal(true)}
           isPushing={isSyncing}
         />
       </main>
@@ -400,10 +456,17 @@ export default function App() {
         config={shopifyConfig}
         onUpdateConfig={setShopifyConfig}
         products={cleansedProducts}
-        selectedIds={selectedIds}
+        selectedIds={selectedListingIds}
         onExecuteSync={handleExecuteBatchSync}
         isSyncing={isSyncing}
         syncLogs={syncLogs}
+        onOpenCleanupModal={() => setShowCleanupModal(true)}
+      />
+
+      <ShopifyStoreCleanupModal
+        isOpen={showCleanupModal}
+        onClose={() => setShowCleanupModal(false)}
+        config={shopifyConfig}
       />
 
       <PythonScriptModal
@@ -423,13 +486,21 @@ export default function App() {
 
       <ProductPreviewModal
         product={previewProduct}
-        onClose={() => setPreviewProduct(null)}
+        listing={previewListing}
+        onClose={() => {
+          setPreviewProduct(null);
+          setPreviewListing(null);
+        }}
       />
 
       <PayloadInspectModal
         product={inspectProduct}
+        listing={inspectListing}
         shopifyConfig={shopifyConfig}
-        onClose={() => setInspectProduct(null)}
+        onClose={() => {
+          setInspectProduct(null);
+          setInspectListing(null);
+        }}
       />
     </div>
   );
