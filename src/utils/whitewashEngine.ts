@@ -78,9 +78,9 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   nightstands: {
     englishCategory: 'Nightstands',
-    shopifyCategory: 'Furniture > Bedroom Furniture > Nightstands',
-    topLevelCategory: 'Furniture > Bedroom Furniture',
-    googleProductCategory: 'Furniture > Bedroom Furniture > Nightstands',
+    shopifyCategory: 'Furniture > Tables > Nightstands',
+    topLevelCategory: 'Furniture > Tables',
+    googleProductCategory: 'Furniture > Tables > Nightstands',
     spanishType: 'Mesitas de Noche',
   },
   'other outdoor furniture': {
@@ -92,23 +92,23 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   'storage trolleys': {
     englishCategory: 'Storage Trolleys',
-    shopifyCategory: 'Furniture > Carts & Islands > Kitchen & Dining Carts',
-    topLevelCategory: 'Home & Garden > Household Supplies',
-    googleProductCategory: 'Home & Garden > Household Supplies > Storage & Organization',
+    shopifyCategory: 'Furniture > Carts & Islands > Carts > Kitchen Carts',
+    topLevelCategory: 'Furniture > Carts & Islands',
+    googleProductCategory: 'Furniture > Carts & Islands > Carts > Kitchen Carts',
     spanishType: 'Carritos de Almacenaje',
   },
   'trash cans': {
     englishCategory: 'Trash Cans',
-    shopifyCategory: 'Home & Garden > Household Supplies > Waste Containment > Trash Cans',
+    shopifyCategory: 'Home & Garden > Household Supplies > Waste Containment > Trash Cans & Wastebaskets',
     topLevelCategory: 'Home & Garden > Household Supplies',
-    googleProductCategory: 'Home & Garden > Household Supplies > Waste Containment > Trash Cans',
+    googleProductCategory: 'Home & Garden > Household Supplies > Waste Containment > Trash Cans & Wastebaskets',
     spanishType: 'Cubos de Basura',
   },
   'sofa beds & chaise lounges': {
     englishCategory: 'Sofa Beds & Chaise Lounges',
-    shopifyCategory: 'Furniture > Living Room Furniture > Sofas',
-    topLevelCategory: 'Furniture > Living Room Furniture',
-    googleProductCategory: 'Furniture > Living Room Furniture > Sofas',
+    shopifyCategory: 'Furniture > Sofas > Sofa Beds',
+    topLevelCategory: 'Furniture > Sofas',
+    googleProductCategory: 'Furniture > Sofas > Sofa Beds',
     spanishType: 'Sofás y Chaise Longues',
   },
   'storage cabinets': {
@@ -120,9 +120,9 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   awnings: {
     englishCategory: 'Awnings',
-    shopifyCategory: 'Hardware > Building Materials > Canopies & Awnings',
-    topLevelCategory: 'Hardware > Building Materials',
-    googleProductCategory: 'Hardware > Building Materials > Canopies & Awnings',
+    shopifyCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Awnings',
+    topLevelCategory: 'Home & Garden > Lawn & Garden',
+    googleProductCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Awnings',
     spanishType: 'Toldos y Pérgolas',
   },
   'garden furniture sets': {
@@ -134,9 +134,9 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   'sun loungers': {
     englishCategory: 'Sun Loungers',
-    shopifyCategory: 'Furniture > Outdoor Furniture > Outdoor Chairs > Sunloungers',
+    shopifyCategory: 'Furniture > Outdoor Furniture > Outdoor Seating > Sunloungers',
     topLevelCategory: 'Furniture > Outdoor Furniture',
-    googleProductCategory: 'Furniture > Outdoor Furniture > Outdoor Chairs > Sunloungers',
+    googleProductCategory: 'Furniture > Outdoor Furniture > Outdoor Seating > Sunloungers',
     spanishType: 'Tumbonas de Jardín',
   },
   'parasol umbrellas & accessories': {
@@ -155,16 +155,16 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   'shade sails': {
     englishCategory: 'Shade Sails',
-    shopifyCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades',
+    shopifyCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades > Shade Sails',
     topLevelCategory: 'Home & Garden > Lawn & Garden',
-    googleProductCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades',
+    googleProductCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Umbrellas & Sunshades > Shade Sails',
     spanishType: 'Toldos Vela de Sombra',
   },
   'charcoal grills': {
     englishCategory: 'Charcoal Grills',
-    shopifyCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Grills',
-    topLevelCategory: 'Home & Garden > Lawn & Garden',
-    googleProductCategory: 'Home & Garden > Lawn & Garden > Outdoor Living > Outdoor Grills',
+    shopifyCategory: 'Home & Garden > Kitchen & Dining > Kitchen Appliances > Outdoor Grills',
+    topLevelCategory: 'Home & Garden > Kitchen & Dining',
+    googleProductCategory: 'Home & Garden > Kitchen & Dining > Kitchen Appliances > Outdoor Grills',
     spanishType: 'Barbacoas y Parrillas',
   },
   'bookcases & shelves': {
@@ -204,10 +204,24 @@ export const AOSOM_TAXONOMY_MAP: Record<string, TaxonomyMapping> = {
   },
   'shoe racks': {
     englishCategory: 'Shoe Racks',
-    shopifyCategory: 'Home & Garden > Household Supplies > Storage & Organization > Clothing & Wardrobe Storage > Shoe Racks & Organizers',
+    shopifyCategory: 'Home & Garden > Household Supplies > Storage & Organization > Clothing & Closet Storage > Shoe Racks & Organizers',
     topLevelCategory: 'Home & Garden > Household Supplies',
-    googleProductCategory: 'Home & Garden > Household Supplies > Storage & Organization > Clothing & Wardrobe Storage > Shoe Racks & Organizers',
+    googleProductCategory: 'Home & Garden > Household Supplies > Storage & Organization > Clothing & Closet Storage > Shoe Racks & Organizers',
     spanishType: 'Zapateros',
+  },
+  'tv stands': {
+    englishCategory: 'TV Stands & Entertainment Centers',
+    shopifyCategory: 'Furniture > Entertainment Centers & TV Stands',
+    topLevelCategory: 'Furniture',
+    googleProductCategory: 'Furniture > Entertainment Centers & TV Stands',
+    spanishType: 'Muebles de TV y Salón',
+  },
+  'bar stools': {
+    englishCategory: 'Bar Stools',
+    shopifyCategory: 'Furniture > Chairs > Table & Bar Stools > Bar Stools',
+    topLevelCategory: 'Furniture > Chairs',
+    googleProductCategory: 'Furniture > Chairs > Table & Bar Stools > Bar Stools',
+    spanishType: 'Taburetes y Sillas Altas',
   },
 };
 
@@ -237,6 +251,30 @@ export function resolveShopifyTaxonomy(rawCategory: string = '', rawTitle: strin
   if (/nightstand|mesita.*noche/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['nightstands'];
   }
+  if (/mueble.*tv|soporte.*tv|televisi|tv.*stand|entertainment.*center/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['tv stands'];
+  }
+  if (/taburete|bar.*stool|counter.*stool/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['bar stools'];
+  }
+  if (/zapatero|shoe.*rack|shoe.*cabinet/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['shoe racks'];
+  }
+  if (/grill|barbacoa|parrilla/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['charcoal grills'];
+  }
+  if (/tumbona|sun.*lounger|hamaca/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['sun loungers'];
+  }
+  if (/sombrilla|parasol/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['parasol umbrellas & accessories'];
+  }
+  if (/toldo.*vela|shade.*sail/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['shade sails'];
+  }
+  if (/toldo|pérgola|cenador|awning|pergola|gazebo/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['awnings'];
+  }
   if (/trampa|trap|animal.*vivo|camping|hiking|tienda.*campa/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['camping & hiking'];
   }
@@ -249,29 +287,42 @@ export function resolveShopifyTaxonomy(rawCategory: string = '', rawTitle: strin
   if (/sofa|sofá|chaise|sillón|butaca/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['sofa beds & chaise lounges'];
   }
-  if (/toldo|pérgola|cenador|awning|pergola|gazebo|sombrilla|parasol/i.test(combined)) {
-    return AOSOM_TAXONOMY_MAP['awnings'];
+  if (/conjunto.*jardín|conjunto.*exterior|garden.*furniture.*set/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['garden furniture sets'];
   }
-  if (/jardín|garden|outdoor|terraza|tumbona|hamaca|grill|barbacoa/i.test(combined)) {
+  if (/jardín|garden|outdoor|terraza/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['other outdoor furniture'];
   }
-  if (/armario|estantería|librería|zapatero|storage|cabinet|shelf|shelves/i.test(combined)) {
+  if (/librería|estantería|bookcase|bookshelf/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['bookcases & shelves'];
+  }
+  if (/carrito.*almacenaje|trolley|kitchen.*cart/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['storage trolleys'];
+  }
+  if (/cubo.*basura|trash.*can|wastebasket/i.test(combined)) {
+    return AOSOM_TAXONOMY_MAP['trash cans'];
+  }
+  if (/armario|aparador|storage|cabinet|almacenaje/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['storage cabinets'];
   }
   if (/mesa|table|comedor|dining/i.test(combined)) {
     return AOSOM_TAXONOMY_MAP['tables'];
   }
 
-  // Default fallback ensures category is never left blank in Shopify
+  // Default fallback: Ensures category strictly matches Shopify Standard Product Taxonomy
   const capEnglish = rawCategory
     ? rawCategory.trim().charAt(0).toUpperCase() + rawCategory.trim().slice(1)
     : 'Home & Living';
 
+  // Smart broad category fallback: If furniture/interior, use 'Furniture'; else 'Home & Garden > Lawn & Garden'
+  const isIndoorFurniture = /mueble|interior|furniture|living|salón|dormitorio|cama|silla|cocina|casa/i.test(combined);
+  const fallbackShopifyCategory = isIndoorFurniture ? 'Furniture' : 'Home & Garden > Lawn & Garden';
+
   return {
     englishCategory: capEnglish,
-    shopifyCategory: 'Home & Garden > Lawn & Garden',
-    topLevelCategory: 'Home & Garden > Lawn & Garden',
-    googleProductCategory: 'Home & Garden > Lawn & Garden',
+    shopifyCategory: fallbackShopifyCategory,
+    topLevelCategory: isIndoorFurniture ? 'Furniture' : 'Home & Garden',
+    googleProductCategory: fallbackShopifyCategory,
     spanishType: rawCategory || 'Hogar y Decoración',
   };
 }
