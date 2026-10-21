@@ -1,0 +1,202 @@
+"""
+Push cleaned Casalivo products to Shopify Admin API (GraphQL 2026-07)
+--------------------------------------------------------------------
+Reads shopify_import_casalivo_es.json (built by build_casalivo_import.py), then for
+every product:
+  * looks up existing variant by SKU  -> create new or update existing
+  * sets inventory at the primary location
+  * publishes to the Online Store channel
+  * appends the result to push_log.json
+
+Usage:
+  python push_to_shopify.py --domain <shop>.myshopify.com --token shpat_xxx [--dry-run]
+Credentials fall back to .env (SHOPIFY_SHOP_DOMAIN / SHOPIFY_ACCESS_TOKEN).
+"""
+import os
+import sys
+import json
+import time
+import argparse
+from typing import Any, Dict, List, Optional
+
+import requests
+from dotenv import load_dotenv
+
+API_VERSION = "2026-07"
+
+
+class Shopify:
+    def __init__(self, domain: str, token: str, version: str = API_VERSION):
+        d = domain.replace("https://", "").replace("http://", "").rstrip("/")
+        if "." not in d:
+            d = f"{d}.myshopify.com"
+        self.domain = d
+        self.url = f"https://{d}/admin/api/{version}/graphql.json"
+        self.headers = {"X-Shopify-Access-Token": token, "Content-Type": "application/json"}
+
+    def gql(self, query: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        for attempt in range(4):
+            r = requests.post(self.url, headers=self.headers,
+                              json={"query": query, "variables": variables or {}}, timeout=45)
+            if r.status_code in (429, 502, 503):
+                time.sleep(2 * (attempt + 1))
+                continue
+            if r.status_code == 401:
+                raise SystemExit(f"401 Unauthorized: access token 无效或权限不足 ({self.domain})")
+            r.raise_for_status()
+            data = r.json()
+            if data.get("errors"):
+                raise RuntimeError(json.dumps(data["errors"], ensure_ascii=False)[:600])
+            return data["data"]
+        raise RuntimeError("Shopify API rate-limited after retries")
+
+    # ---------------------------------------------------------------- queries
+    def shop(self) -> Dict[str, Any]:
+        return self.gql("{ shop { name myshopifyDomain currencyCode primaryDomain { url } } }")["shop"]
+
+    def primary_location(self) -> Optional[Dict[str, Any]]:
+        q = """{ locations(first: 10) { edges { node { id name isPrimary activatable } } } }"""
+        locs = [e["node"] for e in self.gql(q)["locations"]["edges"]]
+        for l in locs:
+            if l.get("isPrimary"):
+                return l
+        return locs[0] if locs else None
+
+    def variant_by_sku(self, sku: str) -> Optional[Dict[str, Any]]:
+        q = """query($q: String!){ productVariants(first: 1, query: $q) { edges { node {
+                 id sku inventoryItem { id } product { id } } } } }"""
+        edges = self.gql(q, {"q": f"sku:{sku}"})["productVariants"]["edges"]
+        return edges[0]["node"] if edges else None
+
+    # ---------------------------------------------------------------- mutations
+    def create_product(self, p: Dict[str, Any]) -> Dict[str, Any]:
+        q = """mutation($input: ProductInput!) { productCreate(input: $input) {
+                 product { id title variants(first: 1) { edges { node { id sku } } } }
+                 userErrors { field message } } }"""
+        inp = {
+            "title": p["title"],
+            "descriptionHtml": p["body_html"],
+            "vendor": p["vendor"],
+            "productType": p["product_type"],
+            "tags": p["tags"],
+            "status": p["status"].upper(),
+        }
+        res = self.gql(q, {"input": inp})["productCreate"]
+        if res["userErrors"]:
+            raise RuntimeError(res["userErrors"])
+        prod = res["product"]
+        variant = prod["variants"]["edges"][0]["node"]
+        v = p["variants"][0]
+        self.update_variant(prod["id"], variant["id"], v)
+        return prod
+
+    def update_variant(self, product_id: str, variant_id: str, v: Dict[str, Any]) -> Dict[str, Any]:
+        q = """mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                 productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                   productVariants { id sku price }
+                   userErrors { field message } } }"""
+        var = {
+            "id": variant_id,
+            "sku": v["sku"],
+            "price": v["price"],
+            "compareAtPrice": v["compare_at_price"],
+            "inventoryItem": {"tracked": True, "measurement": {"weight": {"value": v["weight"], "unit": "KILOGRAMS"}}},
+            "inventoryPolicy": "DENY",
+            "taxable": v.get("taxable", True),
+        }
+        res = self.gql(q, {"productId": product_id, "variants": [var]})["productVariantsBulkUpdate"]
+        if res["userErrors"]:
+            raise RuntimeError(res["userErrors"])
+        return res["productVariants"][0]
+
+    def add_images(self, product_id: str, urls: List[str]) -> None:
+        q = """mutation($productId: ID!, $media: [CreateMediaInput!]!) {
+                 productCreateMedia(productId: $productId, media: $media) {
+                   media { ... on MediaImage { id } }
+                   mediaUserErrors { field message } } }"""
+        media = [{"originalSource": u, "mediaContentType": "IMAGE", "alt": ""} for u in urls]
+        self.gql(q, {"productId": product_id, "media": media})
+
+    def set_inventory(self, inventory_item_id: str, location_id: str, qty: int) -> None:
+        q = """mutation($input: InventorySetQuantitiesInput!) {
+                 inventorySetQuantities(input: $input) {
+                   inventoryAdjustmentGroup { createdAt }
+                   userErrors { field message } } }"""
+        inp = {
+            "name": "available",
+            "reason": "correction",
+            "ignoreCompareQuantity": True,
+            "quantities": [{"inventoryItemId": inventory_item_id, "locationId": location_id, "quantity": qty}],
+        }
+        res = self.gql(q, {"input": inp})["inventorySetQuantities"]
+        if res["userErrors"]:
+            raise RuntimeError(res["userErrors"])
+
+    def publish(self, product_id: str) -> None:
+        q = """{ publications(first: 10) { edges { node { id name } } } }"""
+        pubs = [e["node"] for e in self.gql(q)["publications"]["edges"]]
+        target = next((p for p in pubs if p["name"].lower() in ("online store", "tienda online")), pubs[0] if pubs else None)
+        if not target:
+            return
+        m = """mutation($id: ID!, $input: [PublicationInput!]!) {
+                 publishablePublish(id: $id, input: $input) { userErrors { field message } } }"""
+        self.gql(m, {"id": product_id, "input": [{"publicationId": target["id"]}]})
+
+
+def main() -> None:
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--domain", default=os.getenv("SHOPIFY_SHOP_DOMAIN", ""))
+    ap.add_argument("--token", default=os.getenv("SHOPIFY_ACCESS_TOKEN", ""))
+    ap.add_argument("--file", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shopify_import_casalivo_es.json"))
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    if not args.domain or not args.token:
+        raise SystemExit("缺少店铺域名或 Admin API token (--domain / --token 或 .env)")
+
+    products = json.load(open(args.file, encoding="utf-8"))
+    print(f"payloads: {len(products)}  ->  {args.domain}  (dry_run={args.dry_run})")
+
+    s = Shopify(args.domain, args.token)
+    info = s.shop()
+    print(f"连接到店铺: {info['name']} ({info['myshopifyDomain']}) 货币 {info['currencyCode']}")
+    loc = s.primary_location()
+    print(f"库存地点: {loc['name'] if loc else '无'}")
+
+    log = []
+    for p in products:
+        entry = {"sku": p["sku"], "title": p["title"][:70]}
+        try:
+            if args.dry_run:
+                entry["action"] = "dry_run"
+            else:
+                existing = s.variant_by_sku(p["sku"])
+                if existing:
+                    pid = existing["product"]["id"]
+                    s.update_variant(pid, existing["id"], p["variants"][0])
+                    entry["action"] = "updated"
+                else:
+                    prod = s.create_product(p)
+                    pid = prod["id"]
+                    entry["action"] = "created"
+                entry["product_id"] = pid
+                if loc:
+                    inv_item = s.variant_by_sku(p["sku"])["inventoryItem"]["id"]
+                    s.set_inventory(inv_item, loc["id"], int(p.get("stock", 0)))
+                s.publish(pid)
+        except Exception as exc:  # noqa: BLE001
+            entry["action"] = "error"
+            entry["error"] = str(exc)[:400]
+        log.append(entry)
+        print(f"  [{entry['action']:8}] {p['sku']:16} {entry.get('error', '')}")
+        time.sleep(0.6)
+
+    out = os.path.join(os.path.dirname(args.file), "push_log.json")
+    json.dump(log, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    ok = sum(1 for e in log if e["action"] in ("created", "updated", "dry_run"))
+    print(f"\n完成: {ok}/{len(products)}，日志 -> {out}")
+
+
+if __name__ == "__main__":
+    main()

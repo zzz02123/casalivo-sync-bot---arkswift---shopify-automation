@@ -1,0 +1,454 @@
+import React, { useState } from 'react';
+import { Sliders, Sparkles, Shield, DollarSign, Plus, Trash2, ArrowRight, Tag, Calculator } from 'lucide-react';
+import { WhitewashConfig, PricingConfig, PricingTier } from '../types';
+import { calculatePricing } from '../utils/whitewashEngine';
+
+interface WhitewashPricingPanelProps {
+  whitewashConfig: WhitewashConfig;
+  pricingConfig: PricingConfig;
+  onUpdateWhitewash: (config: WhitewashConfig) => void;
+  onUpdatePricing: (config: PricingConfig) => void;
+}
+
+export const WhitewashPricingPanel: React.FC<WhitewashPricingPanelProps> = ({
+  whitewashConfig,
+  pricingConfig,
+  onUpdateWhitewash,
+  onUpdatePricing,
+}) => {
+  const [activeTab, setActiveTab] = useState<'whitewash' | 'pricing'>('pricing');
+  const [simCost, setSimCost] = useState<number>(38.5);
+  const [newBannedWord, setNewBannedWord] = useState('');
+
+  // Simulator calculation
+  const simResult = calculatePricing(simCost, pricingConfig);
+
+  const handleAddTier = () => {
+    const newTier: PricingTier = {
+      id: `tier-${Date.now()}`,
+      name: `区间 ${pricingConfig.tiers.length + 1}`,
+      minCost: 100,
+      maxCost: 200,
+      multiplier: 1.6,
+      flatFee: 0,
+    };
+    onUpdatePricing({
+      ...pricingConfig,
+      tiers: [...pricingConfig.tiers, newTier],
+    });
+  };
+
+  const handleUpdateTier = (id: string, field: keyof PricingTier, value: any) => {
+    const updated = pricingConfig.tiers.map((t) => (t.id === id ? { ...t, [field]: value } : t));
+    onUpdatePricing({ ...pricingConfig, tiers: updated });
+  };
+
+  const handleDeleteTier = (id: string) => {
+    if (pricingConfig.tiers.length <= 1) return;
+    onUpdatePricing({
+      ...pricingConfig,
+      tiers: pricingConfig.tiers.filter((t) => t.id !== id),
+    });
+  };
+
+  const handleAddBannedWord = () => {
+    if (!newBannedWord.trim()) return;
+    if (!whitewashConfig.bannedKeywords.includes(newBannedWord.trim())) {
+      onUpdateWhitewash({
+        ...whitewashConfig,
+        bannedKeywords: [...whitewashConfig.bannedKeywords, newBannedWord.trim()],
+      });
+    }
+    setNewBannedWord('');
+  };
+
+  const handleRemoveBannedWord = (word: string) => {
+    onUpdateWhitewash({
+      ...whitewashConfig,
+      bannedKeywords: whitewashConfig.bannedKeywords.filter((w) => w !== word),
+    });
+  };
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6">
+      {/* Tab Navigation */}
+      <div className="bg-slate-800/80 px-6 py-3 border-b border-slate-700/80 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setActiveTab('pricing')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeTab === 'pricing'
+                ? 'bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            <span>阶梯定价与利润引擎 (Tiered Pricing)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('whitewash')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeTab === 'whitewash'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>品牌洗白与敏感词过滤 (Brand Whitewash)</span>
+          </button>
+        </div>
+
+        <span className="text-xs text-slate-400 hidden sm:block">
+          所有修改实时作用于商品列表与推送 Payload
+        </span>
+      </div>
+
+      <div className="p-6">
+        {activeTab === 'pricing' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Tier Config */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-amber-400" />
+                    阶梯加价规则配置 (Tier Rules)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    根据进货供货价自动匹配倍率，确保高货值具备竞争力、低货值保证利润率
+                  </p>
+                </div>
+                <button
+                  onClick={handleAddTier}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs rounded-lg border border-slate-700 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>添加阶梯</span>
+                </button>
+              </div>
+
+              {/* Tiers List */}
+              <div className="space-y-2.5">
+                {pricingConfig.tiers.map((tier, idx) => (
+                  <div
+                    key={tier.id}
+                    className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-3 text-xs"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 font-bold flex items-center justify-center text-[11px]">
+                      {idx + 1}
+                    </div>
+
+                    <div className="flex-1 min-w-[140px]">
+                      <input
+                        type="text"
+                        value={tier.name}
+                        onChange={(e) => handleUpdateTier(tier.id, 'name', e.target.value)}
+                        className="bg-transparent font-medium text-white focus:outline-none w-full border-b border-transparent focus:border-amber-400"
+                      />
+                      <div className="text-[10px] text-slate-500">区间名称</div>
+                    </div>
+
+                    {/* Min - Max Cost */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-500">€</span>
+                      <input
+                        type="number"
+                        value={tier.minCost}
+                        onChange={(e) => handleUpdateTier(tier.id, 'minCost', parseFloat(e.target.value) || 0)}
+                        className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white text-center focus:outline-none focus:border-amber-400"
+                      />
+                      <span className="text-slate-500">~</span>
+                      <input
+                        type="number"
+                        value={tier.maxCost >= 999999 ? '∞' : tier.maxCost}
+                        onChange={(e) =>
+                          handleUpdateTier(
+                            tier.id,
+                            'maxCost',
+                            e.target.value === '∞' ? 999999 : parseFloat(e.target.value) || 0
+                          )
+                        }
+                        className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white text-center focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    {/* Multiplier */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400">×</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={tier.multiplier}
+                        onChange={(e) => handleUpdateTier(tier.id, 'multiplier', parseFloat(e.target.value) || 1)}
+                        className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-amber-400 font-bold text-center focus:outline-none focus:border-amber-400"
+                      />
+                      <span className="text-slate-500">倍</span>
+                    </div>
+
+                    {/* Flat Fee */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-400">+€</span>
+                      <input
+                        type="number"
+                        value={tier.flatFee}
+                        onChange={(e) => handleUpdateTier(tier.id, 'flatFee', parseFloat(e.target.value) || 0)}
+                        className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white text-center focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    {pricingConfig.tiers.length > 1 && (
+                      <button
+                        onClick={() => handleDeleteTier(tier.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1"
+                        title="删除区间"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Extra Pricing Controls */}
+              <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">尾数价格规整</label>
+                  <select
+                    value={pricingConfig.rounding}
+                    onChange={(e) => onUpdatePricing({ ...pricingConfig, rounding: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="99">.99 心理价 (如 €79.99)</option>
+                    <option value="95">.95 促销价 (如 €79.95)</option>
+                    <option value="integer">取整整数 (如 €80.00)</option>
+                    <option value="none">保留原计算两位小数</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">划线原价 (MSRP) 倍率</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={pricingConfig.compareAtMultiplier}
+                      onChange={(e) =>
+                        onUpdatePricing({
+                          ...pricingConfig,
+                          compareAtMultiplier: parseFloat(e.target.value) || 1.3,
+                        })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
+                    />
+                    <span className="text-slate-500">×售价</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">单件附加杂费 / 运费</label>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">€</span>
+                    <input
+                      type="number"
+                      value={pricingConfig.shippingFee}
+                      onChange={(e) =>
+                        onUpdatePricing({
+                          ...pricingConfig,
+                          shippingFee: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Live Interactive Simulator */}
+            <div className="lg:col-span-5 flex flex-col justify-between">
+              <div className="bg-gradient-to-br from-slate-950 to-slate-900 p-5 rounded-2xl border border-amber-500/30 shadow-xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
+                      <Calculator className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">实时加价模拟器 (Pricing Simulator)</h4>
+                      <p className="text-[10px] text-slate-400">输入进货供货价，即刻核算最终零售价与毛利</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-mono">
+                    {simResult.appliedTier}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5">
+                    模拟输入 ArkSwift 供货底价 (Cost Price):
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">€</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={simCost}
+                      onChange={(e) => setSimCost(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-900 border border-amber-500/50 rounded-xl pl-8 pr-3 py-2 text-white font-mono text-base font-bold focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Calculation Outputs */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400 mb-0.5">Shopify 建议售价</div>
+                    <div className="text-xl font-extrabold text-amber-400 font-mono">
+                      €{simResult.sellingPrice.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-slate-500 line-through">
+                      原价 €{simResult.compareAtPrice.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400 mb-0.5">毛利润 &amp; 利润率</div>
+                    <div className="text-xl font-extrabold text-emerald-400 font-mono">
+                      €{simResult.profitAmount.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-medium">
+                      毛利率 {simResult.profitMargin}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/60 space-y-1">
+                  <div className="flex justify-between">
+                    <span>供货成本:</span>
+                    <span className="font-mono text-white">€{simCost.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>附加运杂费:</span>
+                    <span className="font-mono text-white">€{pricingConfig.shippingFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-amber-300 pt-1 border-t border-slate-800">
+                    <span>纯利润 (每件):</span>
+                    <span className="font-mono text-emerald-400">€{simResult.profitAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Tab 2: Brand Whitewashing Rules */
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  目标独立站品牌名 (Brand Name)
+                </label>
+                <p className="text-[10px] text-slate-500 mb-2">
+                  原厂所有品牌与供应商（如 SPANISH AOSOM SL）将统一清洗为此品牌
+                </p>
+                <input
+                  type="text"
+                  value={whitewashConfig.brandName}
+                  onChange={(e) => onUpdateWhitewash({ ...whitewashConfig, brandName: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  SKU 规范前缀 (Brand SKU Prefix)
+                </label>
+                <p className="text-[10px] text-slate-500 mb-2">
+                  自动将原厂 SKU（如 01-0340）规范为属于你品牌的商品编号
+                </p>
+                <input
+                  type="text"
+                  value={whitewashConfig.skuPrefix}
+                  onChange={(e) => onUpdateWhitewash({ ...whitewashConfig, skuPrefix: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-amber-300 font-mono font-bold focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  安全库存保护阈值 (Safety Stock Buffer)
+                </label>
+                <p className="text-[10px] text-slate-500 mb-2">
+                  当原仓库存低于此值，Shopify 自动显示售罄或下架防超卖
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={whitewashConfig.safetyStockBuffer}
+                    onChange={(e) =>
+                      onUpdateWhitewash({
+                        ...whitewashConfig,
+                        safetyStockBuffer: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:border-indigo-400"
+                  />
+                  <span className="text-xs text-slate-400 shrink-0">件/款</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Banned Keywords & Supplier Blacklist */}
+            <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Shield className="w-4 h-4 text-rose-400" />
+                    敏感词与违禁词过滤库 (Banned Keywords)
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    在标题、详情中检测到以下词汇时将自动抹除，防止买家查出原厂来源或原售后声明
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newBannedWord}
+                    onChange={(e) => setNewBannedWord(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddBannedWord()}
+                    placeholder="添加敏感词..."
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-rose-400"
+                  />
+                  <button
+                    onClick={handleAddBannedWord}
+                    className="px-2.5 py-1 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 text-xs rounded-lg transition"
+                  >
+                    + 添加
+                  </button>
+                </div>
+              </div>
+
+              {/* Tag Cloud */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {whitewashConfig.bannedKeywords.map((word) => (
+                  <span
+                    key={word}
+                    className="inline-flex items-center gap-1 bg-slate-900 text-slate-300 px-2.5 py-1 rounded-md text-xs border border-slate-800 hover:border-rose-500/40 transition group"
+                  >
+                    <span>{word}</span>
+                    <button
+                      onClick={() => handleRemoveBannedWord(word)}
+                      className="text-slate-500 group-hover:text-rose-400 ml-0.5"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

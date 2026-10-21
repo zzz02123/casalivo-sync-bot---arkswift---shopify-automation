@@ -1,0 +1,47 @@
+{
+  "source": "C:\\Users\\mi/Downloads\\Aosom ESStore Products 20261019(8).xlsx",
+  "products": 8156,
+  "active": 6067,
+  "draft": 2089,
+  "csv_rows": 81473,
+  "files": [
+    {
+      "file": "shopify_import_es_full_01.csv",
+      "products": 2000,
+      "rows": 19992,
+      "bytes": 13139121
+    },
+    {
+      "file": "shopify_import_es_full_02.csv",
+      "products": 2000,
+      "rows": 19993,
+      "bytes": 12863264
+    },
+    {
+      "file": "shopify_import_es_full_03.csv",
+      "products": 2000,
+      "rows": 19985,
+      "bytes": 12842707
+    },
+    {
+      "file": "shopify_import_es_full_04.csv",
+      "products": 2000,
+      "rows": 19954,
+      "bytes": 12778822
+    },
+    {
+      "file": "shopify_import_es_full_05.csv",
+      "products": 156,
+      "rows": 1549,
+      "bytes": 945153
+    }
+  ],
+  "total_bytes": 52569067,
+  "whitewash_leaks": [],
+  "price_min": 4.99,
+  "price_max": 1093.99,
+  "avg_margin_pct": 48.3,
+  "brand": null,
+  "safety_buffer": 3,
+  "template": "shopify-current (URL handle / Description / SKU / Inventory quantity)"
+}
